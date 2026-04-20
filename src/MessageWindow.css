@@ -1,0 +1,39 @@
+.message-window {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+    background-color: #ffffff;
+    display: flex;
+    flex-direction: column;
+}
+
+.message {
+    margin-bottom: 15px;
+    padding: 12px 18px;
+    border-radius: 20px;
+    max-width: 60%;
+    position: relative;
+    word-wrap: break-word;
+}
+
+.me {
+    background: #007bff;
+    color: white;
+    align-self: flex-end;
+    border-bottom-right-radius: 2px;
+}
+
+.other {
+    background: #f1f0f0;
+    color: #333;
+    align-self: flex-start;
+    border-bottom-left-radius: 2px;
+}
+
+.author {
+    font-size: 12px;
+    margin-bottom: 5px;
+    opacity: 0.8;
+    font-weight: bold;
+    display: block;
+}

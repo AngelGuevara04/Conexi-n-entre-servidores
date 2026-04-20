@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Servidor de Chat WebSocket</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="login-modal">
+        <div class="modal-content">
+            <h2>Bienvenido al Chat</h2>
+            <p>Ingresa tu nombre para conectarte al servidor</p>
+            <input type="text" id="username" placeholder="Ej. Mario, Carlos, Sergio...">
+            <button onclick="conectarAlServidor()">Entrar</button>
+        </div>
+    </div>
+
+    <div id="app">
+        <div id="sidebar">
+            <h3>Chats</h3>
+            <ul id="user-list">
+                <li id="tab-Todos" class="active-tab" onclick="cambiarChat('Todos')">🌐 Sala General</li>
+            </ul>
+        </div>
+        
+        <div id="chat-area">
+            <div id="chat-header">Conversando en: <strong>Sala General</strong></div>
+            <div id="chat-history"></div>
+            <div id="input-area">
+                <input type="text" id="mensaje" placeholder="Escribe tu mensaje..." onkeypress="if(event.key === 'Enter') enviarMensaje()">
+                <button onclick="enviarMensaje()">Enviar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
