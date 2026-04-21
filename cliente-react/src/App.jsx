@@ -2,47 +2,50 @@ import React, { useState, useEffect } from 'react';
 import { connect, send } from './websocket';
 import MessageWindow from './MessageWindow';
 import TextBar from './TextBar';
-import './App.css'; // Usaremos el CSS que ya tenías configurado
+import './App.css'; 
 
 function App() {
     // --- ESTADOS ---
     const [identificado, setIdentificado] = useState(false);
     const [nombre, setNombre] = useState("");
-    const [usuarios, setUsuarios] = useState([]);
+    const [usuarios, setUsuarios] = useState([]); // Todos los conectados
+    
+    // NUEVOS ESTADOS: Estilo WhatsApp
+    const [chatsAbiertos, setChatsAbiertos] = useState(["Todos"]); // Solo los chats activos
+    const [vistaContactos, setVistaContactos] = useState(false);   // Para alternar la barra lateral
+    const [busqueda, setBusqueda] = useState("");                  // Para el buscador de contactos
+    
     const [chatActivo, setChatActivo] = useState("Todos");
     const [historiales, setHistoriales] = useState({ Todos: [] });
 
-    // --- CONEXIÓN INICIAL ---
+    // --- LÓGICA DE BÚSQUEDA ---
+    // Filtramos los usuarios en tiempo real basados en lo que se escriba en el buscador
+    const usuariosFiltrados = usuarios.filter(u => 
+        u.toLowerCase().includes(busqueda.toLowerCase())
+    );
+
+    // --- CONEXIÓN ---
     const iniciarConexion = () => {
-        if (!nombre.trim()) return alert("Ingresa un nombre para conectarte");
+        if (!nombre.trim()) return alert("Ingresa un nombre");
 
         connect(
             (incoming) => {
-                // Manejador de eventos que vienen del servidor
                 if (incoming.mensaje === "IDENTIFICATE") {
                     send("IDENTIFICACION", nombre);
                     send("CONECTADOS");
                     setIdentificado(true);
                 }
-
                 if (incoming.mensaje === "CONECTADOS" && incoming.data) {
                     setUsuarios(incoming.data);
                 }
-
                 if (incoming.mensaje === "CHAT" && incoming.data) {
                     gestionarMensajeEntrante(incoming.data.emisor, incoming.data.mensaje);
                 }
             },
-            () => {
-                alert("Te has desconectado del servidor");
-                window.location.reload();
-            }
+            () => { alert("Desconectado"); window.location.reload(); }
         );
 
-        // Iniciamos el polling: Pedir lista de conectados cada 3 segundos
-        setInterval(() => {
-            send("CONECTADOS");
-        }, 3000);
+        setInterval(() => send("CONECTADOS"), 3000);
     };
 
     // --- GESTIÓN DE MENSAJES ---
@@ -57,6 +60,12 @@ function App() {
             limpio = texto.replace("[PRIVADO]", "");
         }
 
+        // MAGIA WHATSAPP: Si alguien te escribe y no tenías su chat abierto, se abre automáticamente
+        setChatsAbiertos(prev => {
+            if (!prev.includes(sala)) return [sala, ...prev];
+            return prev;
+        });
+
         setHistoriales(prev => ({
             ...prev,
             [sala]: [...(prev[sala] || []), { autor: emisor, texto: limpio, tipo: 'other' }]
@@ -67,14 +76,23 @@ function App() {
         const prefijo = chatActivo === "Todos" ? "[GLOBAL]" : "[PRIVADO]";
         const receptores = chatActivo === "Todos" ? usuarios : [chatActivo];
 
-        // Se lo enviamos al servidor
         send("CHAT", { receptor: receptores, mensaje: prefijo + texto });
 
-        // Lo guardamos en nuestro propio historial visual
         setHistoriales(prev => ({
             ...prev,
             [chatActivo]: [...(prev[chatActivo] || []), { autor: "Tú", texto: texto, tipo: 'me' }]
         }));
+    };
+
+    // ACCIÓN WHATSAPP: Iniciar un nuevo chat desde la lista de contactos
+    const abrirChat = (usuario) => {
+        setChatsAbiertos(prev => {
+            if (!prev.includes(usuario)) return [usuario, ...prev]; // Lo pone hasta arriba
+            return prev;
+        });
+        setChatActivo(usuario);
+        setVistaContactos(false); // Regresa a la vista normal de chats
+        setBusqueda("");          // Limpia el buscador para la próxima vez
     };
 
     // --- RENDERIZADO VISUAL ---
@@ -83,13 +101,12 @@ function App() {
             <div className="login-container">
                 <div className="card">
                     <h2>Bienvenido al Chat</h2>
-                    <p>Ingresa tu nombre para conectarte</p>
                     <input 
                         type="text" 
                         value={nombre} 
                         onChange={e => setNombre(e.target.value)} 
                         onKeyPress={e => e.key === 'Enter' && iniciarConexion()}
-                        placeholder="Ej. Mario, Carlos..." 
+                        placeholder="Tu nombre..." 
                     />
                     <button onClick={iniciarConexion}>Entrar</button>
                 </div>
@@ -99,38 +116,77 @@ function App() {
 
     return (
         <div className="app-container">
-            {/* Barra Lateral Modularizada */}
+            {/* --- BARRA LATERAL ESTILO WHATSAPP --- */}
             <aside className="sidebar">
-                <h3>Chats ({usuarios.length})</h3>
-                <div className="user-list">
-                    <div 
-                        className={`tab ${chatActivo === "Todos" ? "active-tab" : ""}`}
-                        onClick={() => setChatActivo("Todos")}
-                    >
-                        🌐 Sala General
-                    </div>
-                    {usuarios.map(u => (
-                        <div 
-                            key={u} 
-                            className={`tab ${chatActivo === u ? "active-tab" : ""}`}
-                            onClick={() => setChatActivo(u)}
-                        >
-                            👤 {u}
+                
+                {vistaContactos ? (
+                    /* VISTA 2: LISTA DE CONTACTOS PARA NUEVO CHAT (CON BUSCADOR) */
+                    <>
+                        <div className="sidebar-header slide-header">
+                            <button className="icon-btn" onClick={() => { setVistaContactos(false); setBusqueda(""); }}>←</button>
+                            <h3>Nuevo Chat</h3>
                         </div>
-                    ))}
-                </div>
+                        
+                        {/* CONTENEDOR DEL BUSCADOR */}
+                        <div className="search-container">
+                            <input 
+                                type="text" 
+                                placeholder="Buscar contacto..." 
+                                value={busqueda}
+                                onChange={(e) => setBusqueda(e.target.value)}
+                            />
+                        </div>
+
+                        {/* LISTA VERTICAL FILTRADA */}
+                        <div className="user-list vertical-list">
+                            {usuariosFiltrados.length === 0 ? (
+                                <p className="empty-msg">No se encontraron usuarios</p>
+                            ) : (
+                                usuariosFiltrados.map(u => (
+                                    <div key={u} className="tab" onClick={() => abrirChat(u)}>
+                                        <div className="avatar">👤</div>
+                                        <div className="tab-info">
+                                            <span className="tab-name">{u}</span>
+                                            <span className="tab-status">Disponible</span>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </>
+                ) : (
+                    /* VISTA 1: CHATS ACTIVOS (HISTORIAL) */
+                    <>
+                        <div className="sidebar-header">
+                            <h3>Chats</h3>
+                            <button className="new-chat-btn" onClick={() => setVistaContactos(true)} title="Nuevo Chat">
+                                ➕
+                            </button>
+                        </div>
+                        <div className="user-list">
+                            {chatsAbiertos.map(chat => (
+                                <div 
+                                    key={chat} 
+                                    className={`tab ${chatActivo === chat ? "active-tab" : ""}`}
+                                    onClick={() => setChatActivo(chat)}
+                                >
+                                    <div className="avatar">{chat === "Todos" ? "🌐" : "👤"}</div>
+                                    <div className="tab-info">
+                                        <span className="tab-name">{chat === "Todos" ? "Sala General" : chat}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </>
+                )}
             </aside>
 
-            {/* Ventana de Chat Dinámica */}
+            {/* --- VENTANA DE CHAT --- */}
             <main className="chat-window">
                 <header className="chat-header">
-                    Conversando en: <strong>{chatActivo === 'Todos' ? 'Sala General' : chatActivo}</strong>
+                    Conversando con: <strong>{chatActivo === 'Todos' ? 'Sala General' : chatActivo}</strong>
                 </header>
-                
-                {/* Aquí inyectamos el componente MessageWindow que descargaste */}
                 <MessageWindow messages={historiales[chatActivo] || []} />
-                
-                {/* Aquí inyectamos el componente TextBar que descargaste */}
                 <TextBar onSend={handleSendMessage} />
             </main>
         </div>

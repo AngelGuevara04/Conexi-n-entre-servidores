@@ -1,40 +1,47 @@
+/* El contenedor toma TODO el ancho disponible */
 .text-bar {
-  padding: 15px 25px;
-  background-color: #f0f2f5;
   display: flex;
-  gap: 15px;
-  align-items: center;
+  width: 100%;
+  background-color: #f0f2f5;
+  padding: 10px 15px; /* Espacio para que no toque los bordes del celular */
+  box-sizing: border-box;
+  /* Quitamos el gap para que el input y el botón se peguen */
+  gap: 0; 
   z-index: 10;
 }
 
+/* Caja para escribir */
 .text-bar input {
-  flex: 1;
-  padding: 14px 20px;
+  flex: 1; 
   border: none;
-  border-radius: 24px; /* Forma de píldora */
+  border-radius: 25px 0 0 25px; /* Borde redondo a la izquierda */
+  padding: 14px 20px;
   font-size: 1rem;
-  background-color: #ffffff;
   outline: none;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  transition: box-shadow 0.2s;
+  background-color: #ffffff;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 
-.text-bar input:focus {
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-}
-
+/* El botón de la flecha */
 .text-bar button {
-  padding: 12px 28px;
   background-color: #00a884;
   color: white;
   border: none;
-  border-radius: 24px; /* Forma de píldora */
-  font-size: 1rem;
-  font-weight: 600;
+  border-radius: 0 25px 25px 0; /* Borde redondo a la derecha */
+  padding: 0 20px;
   cursor: pointer;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  transition: transform 0.1s, background-color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  transition: background-color 0.2s;
 }
 
-.text-bar button:hover { background-color: #008f6f; }
-.text-bar button:active { transform: scale(0.95); }
+.text-bar button:hover {
+  background-color: #008f6f;
+}
+
+/* Flecha centrada */
+.text-bar button svg {
+  margin-left: 2px;
+}

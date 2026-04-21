@@ -28,7 +28,7 @@
   border-radius: 8px;
   font-size: 16px;
   outline: none;
-  box-sizing: border-box; /* Evita que el input se salga de la tarjeta */
+  box-sizing: border-box; 
 }
 
 .card input:focus { border-color: #00a884; }
@@ -53,50 +53,145 @@
   overflow: hidden;
 }
 
-/* --- BARRA LATERAL (SIDEBAR) --- */
+/* --- BARRA LATERAL (SIDEBAR) ESTILO WHATSAPP --- */
 .sidebar {
-  width: 320px;
-  background-color: #202c33;
-  color: #e9edef;
+  width: 340px;
+  background-color: #ffffff; 
+  color: #111b21;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #2a3942;
+  border-right: 1px solid #d1d7db;
 }
 
-.sidebar h3 {
+.sidebar-header {
+  padding: 15px 20px;
+  background-color: #f0f2f5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #d1d7db;
+}
+
+.sidebar-header h3 {
   margin: 0;
-  padding: 20px;
-  background-color: #111b21;
   font-size: 1.1rem;
-  text-align: center;
-  border-bottom: 1px solid #2a3942;
+  font-weight: 600;
 }
 
-/* Aquí está el truco: preparamos la lista para ser flexible */
+.slide-header {
+  background-color: #008069;
+  color: white;
+  justify-content: flex-start;
+  gap: 15px;
+  height: 60px; 
+}
+
+.icon-btn {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+}
+
+.new-chat-btn {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.new-chat-btn:hover { transform: scale(1.1); }
+
+/* --- CONTENEDOR DEL BUSCADOR --- */
+.search-container {
+  padding: 10px 15px;
+  background-color: #ffffff;
+  border-bottom: 1px solid #f0f2f5;
+}
+
+.search-container input {
+  width: 100%;
+  padding: 10px 15px;
+  border: none;
+  border-radius: 8px;
+  background-color: #f0f2f5;
+  font-size: 0.95rem;
+  outline: none;
+  box-sizing: border-box; /* Evita que se salga del borde */
+}
+
+/* --- LISTA DE USUARIOS --- */
 .user-list {
   flex: 1;
   overflow-y: auto;
   display: flex;
-  flex-direction: column; 
+  flex-direction: column;
+  background-color: #ffffff;
+}
+
+/* Forzar lista vertical en "Nuevo Chat" (Sobrescribe estilos de celular) */
+.vertical-list {
+  flex-direction: column !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+.empty-msg {
+  text-align: center;
+  padding: 30px;
+  color: #667781;
+  font-size: 0.9rem;
 }
 
 .tab {
-  padding: 15px 20px;
+  padding: 12px 15px;
   cursor: pointer;
-  border-bottom: 1px solid #2a3942;
-  transition: background-color 0.2s ease;
   display: flex;
   align-items: center;
-  font-size: 1rem;
-  white-space: nowrap; /* Evita que los nombres se partan */
+  gap: 15px;
+  transition: background-color 0.2s ease;
+  border-bottom: 1px solid #f0f2f5; 
 }
 
-.tab:hover { background-color: #2a3942; }
+.tab:hover { background-color: #f5f6f6; }
 
 .active-tab {
-  background-color: #2a3942;
-  font-weight: 600;
-  border-left: 5px solid #00a884;
+  background-color: #f0f2f5; 
+}
+
+.avatar {
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  background-color: #dfe5e7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.tab-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden; 
+}
+
+.tab-name {
+  font-size: 1rem;
+  color: #111b21;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.tab-status {
+  font-size: 0.8rem;
+  color: #667781;
 }
 
 /* --- ÁREA PRINCIPAL --- */
@@ -105,7 +200,7 @@
   display: flex;
   flex-direction: column;
   background-color: #efeae2;
-  min-width: 0; /* Previene desbordes horizontales */
+  min-width: 0; 
 }
 
 .chat-header {
@@ -142,7 +237,7 @@
     font-size: 0.95rem;
   }
 
-  /* Forzamos a que en celular sea una FILA horizontal (row) */
+  /* La lista general de chats es horizontal */
   .user-list {
     flex-direction: row; 
     overflow-x: auto;
@@ -154,16 +249,29 @@
   
   .user-list::-webkit-scrollbar { display: none; }
 
+  /* PERO si tiene la clase vertical-list, se vuelve vertical y ocupa altura */
+  .vertical-list {
+    max-height: 40vh; /* Ocupa hasta el 40% de la pantalla hacia abajo */
+  }
+
   .tab {
-    flex: 0 0 auto; /* Obliga a la pestaña a no aplastarse */
+    flex: 0 0 auto; 
     border-bottom: none;
     border-right: 1px solid #2a3942;
     padding: 12px 20px;
   }
 
+  /* Para las pestañas que están dentro de una lista vertical */
+  .vertical-list .tab {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #f0f2f5;
+    box-sizing: border-box;
+  }
+
   .active-tab {
     border-left: none;
-    border-bottom: 3px solid #00a884; /* Línea verde abajo */
+    border-bottom: 3px solid #00a884; 
   }
 
   .chat-window {
