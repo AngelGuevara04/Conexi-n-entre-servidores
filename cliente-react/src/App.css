@@ -1,17 +1,122 @@
-#root {
+/* --- PANTALLA DE LOGIN --- */
+.login-container {
   display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  /* Degradado moderno */
+  background: linear-gradient(135deg, #00a884 0%, #005c4b 100%);
 }
 
-.container {
-  width: 400px;
+.card {
+  background: white;
+  padding: 40px;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  text-align: center;
+  width: 100%;
+  max-width: 380px;
+}
+
+.card h2 { margin-top: 0; color: #111b21; }
+.card p { color: #667781; margin-bottom: 25px; }
+
+.card input {
+  width: 100%;
+  padding: 14px;
+  margin-bottom: 20px;
+  border: 1px solid #d1d7db;
+  border-radius: 8px;
+  font-size: 16px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.card input:focus { border-color: #00a884; }
+
+.card button {
+  width: 100%;
+  padding: 14px;
+  background-color: #00a884;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.3s, transform 0.1s;
+}
+
+.card button:hover { background-color: #008f6f; }
+.card button:active { transform: scale(0.98); }
+
+/* --- CONTENEDOR PRINCIPAL (APP) --- */
+.app-container {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* --- BARRA LATERAL (SIDEBAR) --- */
+.sidebar {
+  width: 320px;
+  background-color: #202c33; /* Tema oscuro para separar áreas */
+  color: #e9edef;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  margin: auto;
+  border-right: 1px solid #2a3942;
 }
 
-.container-title {
-  font-size: 18px;
+.sidebar h3 {
+  margin: 0;
+  padding: 20px;
+  background-color: #111b21;
+  font-size: 1.1rem;
   text-align: center;
-  margin: 10px 0;
+  border-bottom: 1px solid #2a3942;
+}
+
+.user-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.tab {
+  padding: 15px 20px;
+  cursor: pointer;
+  border-bottom: 1px solid #2a3942;
+  transition: background-color 0.2s ease;
+  display: flex;
+  align-items: center;
+  font-size: 1rem;
+}
+
+.tab:hover { background-color: #2a3942; }
+
+/* La sala activa resalta con una línea lateral de acento */
+.active-tab {
+  background-color: #2a3942;
+  font-weight: 600;
+  border-left: 5px solid #00a884; 
+}
+
+/* --- ÁREA PRINCIPAL --- */
+.chat-window {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  /* Un gris muy suave para el fondo del chat */
+  background-color: #efeae2; 
+}
+
+.chat-header {
+  padding: 18px 25px;
+  background-color: #f0f2f5;
+  border-bottom: 1px solid #d1d7db;
+  font-size: 1.1rem;
+  color: #111b21;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  z-index: 10;
 }

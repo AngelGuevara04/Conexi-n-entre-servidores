@@ -1,14 +1,40 @@
-.textbar {
+.text-bar {
+  padding: 15px 25px;
+  background-color: #f0f2f5;
   display: flex;
-  align-items: stretch;
+  gap: 15px;
+  align-items: center;
+  z-index: 10;
 }
 
-.textbar-input {
-  flex-grow: 1;
-  box-sizing: border-box;
-}
-
-.textbar-send {
-  border-radius: 0;
+.text-bar input {
+  flex: 1;
+  padding: 14px 20px;
   border: none;
+  border-radius: 24px; /* Forma de píldora */
+  font-size: 1rem;
+  background-color: #ffffff;
+  outline: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: box-shadow 0.2s;
 }
+
+.text-bar input:focus {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.text-bar button {
+  padding: 12px 28px;
+  background-color: #00a884;
+  color: white;
+  border: none;
+  border-radius: 24px; /* Forma de píldora */
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: transform 0.1s, background-color 0.2s;
+}
+
+.text-bar button:hover { background-color: #008f6f; }
+.text-bar button:active { transform: scale(0.95); }

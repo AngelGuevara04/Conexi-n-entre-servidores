@@ -1,31 +1,26 @@
-import React from 'react'
-import './MessageWindow.css'
+import React, { useEffect, useRef } from 'react';
+import './MessageWindow.css';
 
-const Message = ({ text, username, self }) => (
-  <div className={'message' + (self ? ' message-self' : '')}>
-    <div className='message-username'>{username}</div>
-    <div className='message-text'>{text}</div>
-  </div>
-)
+const MessageWindow = ({ messages = [] }) => {
+    const bottomRef = useRef(null);
 
-export default class MessageWindow extends React.Component {
-  constructor (props) {
-    super(props)
-    this.messageWindow = React.createRef()
-  }
-  componentDidUpdate () {
-    const messageWindow = this.messageWindow.current
-    messageWindow.scrollTop = messageWindow.scrollHeight - messageWindow.clientHeight
-  }
-  render () {
-    const { messages = [], username } = this.props
+    // Esto hará que la pantalla baje automáticamente cuando llegue un mensaje nuevo
+    useEffect(() => {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages]);
+
     return (
-      <div className='message-window' ref={this.messageWindow}>
-        {messages.map((msg, i) => {
-          return <Message key={i} text={msg.text} username={msg.username} self={username === msg.username} />
-        })}
-        <div>&nbsp;</div>
-      </div>
-    )
-  }
-}
+        <div className="message-window">
+            {messages.map((msg, i) => (
+                <div key={i} className={`message ${msg.tipo}`}>
+                    <span className="author">{msg.autor}</span>
+                    <p style={{ margin: "5px 0 0 0" }}>{msg.texto}</p>
+                </div>
+            ))}
+            {/* Div invisible para forzar el scroll hacia abajo */}
+            <div ref={bottomRef} />
+        </div>
+    );
+};
+
+export default MessageWindow;

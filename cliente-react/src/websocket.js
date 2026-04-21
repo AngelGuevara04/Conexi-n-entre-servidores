@@ -1,25 +1,28 @@
-const host = process.env.NODE_ENV === 'production' ? window.location.host : 'localhost:8080'
+const url = 'ws://localhost:8080';
+let ws;
 
-export let send
+export const connect = (onMessageReceived, onDisconnect) => {
+    ws = new WebSocket(url);
 
-export const startWebsocketConnection = () => {
-  const ws = new window.WebSocket('ws://' + host + '/chat') || {}
-  ws.onopen = () => {
-    console.log('opened ws connection')
-  }
+    ws.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            onMessageReceived(data);
+        } catch (error) {
+            console.error("Error parseando mensaje:", error);
+        }
+    };
 
-  ws.onclose = (e) => {
-    console.log('close ws connection: ', e.code, e.reason)
-  }
+    ws.onclose = () => {
+        console.log('Desconectado');
+        if (onDisconnect) onDisconnect();
+    };
+};
 
-  ws.onmessage = (e) => {
-    onMessageCallback && onMessageCallback(e.data)
-  }
-
-  send = ws.send.bind(ws)
-}
-
-let onMessageCallback
-export const registerOnMessageCallback = (fn) => {
-  onMessageCallback = fn
-}
+export const send = (mensaje, data = {}) => {
+    // Seguridad: Solo enviamos si la conexión está completamente abierta
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        const msg = Object.keys(data).length > 0 ? { mensaje, data } : { mensaje };
+        ws.send(JSON.stringify(msg));
+    }
+};
