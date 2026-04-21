@@ -4,7 +4,6 @@
   align-items: center;
   justify-content: center;
   height: 100vh;
-  /* Degradado moderno */
   background: linear-gradient(135deg, #00a884 0%, #005c4b 100%);
 }
 
@@ -29,7 +28,7 @@
   border-radius: 8px;
   font-size: 16px;
   outline: none;
-  transition: border-color 0.2s;
+  box-sizing: border-box; /* Evita que el input se salga de la tarjeta */
 }
 
 .card input:focus { border-color: #00a884; }
@@ -44,23 +43,20 @@
   font-size: 16px;
   font-weight: bold;
   cursor: pointer;
-  transition: background-color 0.3s, transform 0.1s;
 }
-
-.card button:hover { background-color: #008f6f; }
-.card button:active { transform: scale(0.98); }
 
 /* --- CONTENEDOR PRINCIPAL (APP) --- */
 .app-container {
   display: flex;
   height: 100vh;
   width: 100vw;
+  overflow: hidden;
 }
 
 /* --- BARRA LATERAL (SIDEBAR) --- */
 .sidebar {
   width: 320px;
-  background-color: #202c33; /* Tema oscuro para separar áreas */
+  background-color: #202c33;
   color: #e9edef;
   display: flex;
   flex-direction: column;
@@ -76,9 +72,12 @@
   border-bottom: 1px solid #2a3942;
 }
 
+/* Aquí está el truco: preparamos la lista para ser flexible */
 .user-list {
   flex: 1;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column; 
 }
 
 .tab {
@@ -89,15 +88,15 @@
   display: flex;
   align-items: center;
   font-size: 1rem;
+  white-space: nowrap; /* Evita que los nombres se partan */
 }
 
 .tab:hover { background-color: #2a3942; }
 
-/* La sala activa resalta con una línea lateral de acento */
 .active-tab {
   background-color: #2a3942;
   font-weight: 600;
-  border-left: 5px solid #00a884; 
+  border-left: 5px solid #00a884;
 }
 
 /* --- ÁREA PRINCIPAL --- */
@@ -105,8 +104,8 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  /* Un gris muy suave para el fondo del chat */
-  background-color: #efeae2; 
+  background-color: #efeae2;
+  min-width: 0; /* Previene desbordes horizontales */
 }
 
 .chat-header {
@@ -119,4 +118,66 @@
   align-items: center;
   box-shadow: 0 1px 2px rgba(0,0,0,0.05);
   z-index: 10;
+}
+
+
+/* =========================================
+   📱 ADAPTACIÓN CELULAR INFALIBLE
+   ========================================= */
+@media (max-width: 768px) {
+  .app-container {
+    flex-direction: column;
+    height: 100dvh;
+  }
+
+  .sidebar {
+    width: 100%;
+    flex: 0 0 auto;
+    border-right: none;
+    border-bottom: 1px solid #2a3942;
+  }
+
+  .sidebar h3 {
+    padding: 10px;
+    font-size: 0.95rem;
+  }
+
+  /* Forzamos a que en celular sea una FILA horizontal (row) */
+  .user-list {
+    flex-direction: row; 
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex: 0 0 auto;
+  }
+  
+  .user-list::-webkit-scrollbar { display: none; }
+
+  .tab {
+    flex: 0 0 auto; /* Obliga a la pestaña a no aplastarse */
+    border-bottom: none;
+    border-right: 1px solid #2a3942;
+    padding: 12px 20px;
+  }
+
+  .active-tab {
+    border-left: none;
+    border-bottom: 3px solid #00a884; /* Línea verde abajo */
+  }
+
+  .chat-window {
+    flex: 1 1 auto;
+    min-height: 0; 
+  }
+
+  .chat-header {
+    padding: 12px 15px;
+    font-size: 0.95rem;
+  }
+
+  .card {
+    width: 90%;
+    padding: 25px;
+  }
 }

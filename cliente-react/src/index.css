@@ -1,19 +1,17 @@
-/* Reseteo Global */
-:root {
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+/* RESETEO TOTAL: Matamos los estilos por defecto de Vite */
+
+* {
   box-sizing: border-box;
-}
-
-*, *::before, *::after {
-  box-sizing: inherit;
-}
-
-body, html {
   margin: 0;
   padding: 0;
-  height: 100vh;
-  width: 100vw;
-  overflow: hidden; /* Evita que la pantalla completa haga scroll */
-  background-color: #f0f2f5;
-  color: #111b21;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  /* Usamos dvh para que el celular no corte la pantalla al abrir el teclado */
+  height: 100dvh; 
+  overflow: hidden;
+  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background-color: #efeae2; /* El color de fondo de WhatsApp */
 }

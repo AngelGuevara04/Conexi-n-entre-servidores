@@ -1,4 +1,4 @@
-const url = 'ws://localhost:8080';
+const url = `ws://${window.location.hostname}:8080`;
 let ws;
 
 export const connect = (onMessageReceived, onDisconnect) => {
