@@ -1,11 +1,30 @@
-.text-bar {
+/* angelguevara04/conexi-n-entre-servidores/cliente-react/src/TextBar.css */
+
+/* Contenedor principal: Centra la barra y da el fondo gris de la zona de escritura */
+.text-bar-outer-container {
   display: flex;
+  justify-content: center;
   width: 100%;
   background-color: #f0f2f5;
   padding: 10px 15px;
   box-sizing: border-box;
-  gap: 0;
+  border-top: 1px solid #d1d7db;
+  position: sticky;
+  bottom: 0;
   z-index: 10;
+}
+
+/* Envoltura interna: Limita el ancho en computadoras */
+.text-bar-inner-wrapper {
+  display: flex;
+  width: 100%;
+  max-width: 800px; /* Evita que en PC se vea demasiado larga */
+  background-color: #ffffff;
+  border-radius: 25px; /* Bordes redondeados para un look moderno */
+  padding: 5px 10px 5px 15px;
+  align-items: flex-end; /* Alinea el botón al fondo si el texto crece */
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  gap: 10px;
 }
 
 .input-wrapper {
@@ -13,55 +32,74 @@
   display: flex;
   position: relative;
   align-items: center;
+  min-height: 40px;
 }
 
-.input-wrapper input {
+.input-wrapper textarea {
   width: 100%;
   border: none;
-  border-radius: 25px 0 0 25px;
-  padding: 14px 60px 14px 20px; /* Margen derecho para que el texto no tape el contador */
+  padding: 10px 65px 10px 5px; /* Espacio para el contador a la derecha */
   font-size: 1rem;
   outline: none;
-  background-color: #ffffff;
+  background-color: transparent;
+  resize: none; /* Evita que el usuario la estire manualmente */
+  font-family: inherit;
+  max-height: 150px; /* Límite de crecimiento hacia arriba */
+  overflow-y: auto;
 }
 
 .char-counter {
   position: absolute;
-  right: 15px;
-  font-size: 0.75rem;
+  right: 10px;
+  bottom: 10px;
+  font-size: 0.7rem;
   color: #8696a0;
   font-weight: 600;
   pointer-events: none;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 2px 4px;
+  border-radius: 4px;
 }
 
 .limit-reached {
-  color: #ea0038; /* Rojo cuando llegas al límite */
+  color: #ea0038;
 }
 
-.text-bar button {
+.send-button {
   background-color: #00a884;
   color: white;
   border: none;
-  border-radius: 0 25px 25px 0;
-  padding: 0 20px;
+  border-radius: 50%; /* Botón circular */
+  width: 40px;
+  height: 40px;
+  min-width: 40px; /* Evita que se encoja */
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
+  margin-bottom: 3px; /* Pequeño ajuste visual */
 }
 
-.text-bar button:hover:not(:disabled) {
+.send-button:hover:not(:disabled) {
   background-color: #008f6f;
+  transform: scale(1.05);
 }
 
-/* Estilo cuando el botón está bloqueado */
-.text-bar button:disabled {
+.send-button:disabled {
   background-color: #cbd5d0;
   cursor: not-allowed;
   color: #a0a0a0;
 }
 
-.text-bar button svg {
-  margin-left: 2px;
+/* Ajustes para Pantallas Pequeñas (Celulares) */
+@media (max-width: 600px) {
+  .text-bar-outer-container {
+    padding: 8px 10px;
+  }
+  
+  .text-bar-inner-wrapper {
+    max-width: 100%;
+    border-radius: 20px;
+  }
 }
