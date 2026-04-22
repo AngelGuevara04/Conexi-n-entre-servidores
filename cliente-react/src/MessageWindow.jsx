@@ -1,10 +1,18 @@
 import React, { useEffect, useRef } from 'react';
 import './MessageWindow.css';
 
+/**
+ * COMPONENTE MESSAGE_WINDOW: Responsable del renderizado de la conversación activa.
+ * Es un componente "Tonto" (Presentacional), solo recibe datos (props) y los dibuja.
+ */
 const MessageWindow = ({ messages }) => {
+    // Referencia al final del contenedor DOM para gestionar el scroll automático
     const endOfMessagesRef = useRef(null);
 
-    // Auto-scroll al recibir o enviar mensajes
+    /**
+     * EFECTO DE DESPLAZAMIENTO (Scroll)
+     * Se activa cada vez que el array de 'messages' cambia de longitud.
+     */
     useEffect(() => {
         endOfMessagesRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
@@ -17,18 +25,18 @@ const MessageWindow = ({ messages }) => {
                 </div>
             ) : (
                 messages.map((msg, idx) => (
+                    // Asignación dinámica de clases CSS según si el mensaje es 'me' u 'other'
                     <div key={msg.id || idx} className={`message ${msg.tipo}`}>
-                        {/* Autor (solo si es de otra persona) */}
+                        {/* Renderizado Condicional: Solo mostramos autor en mensajes ajenos */}
                         {msg.tipo === 'other' && <span className="author">{msg.autor}</span>}
                         
-                        {/* Contenido del mensaje */}
                         <div className="text-content">{msg.texto}</div>
                         
-                        {/* Metadatos (Hora y Estado) */}
                         <div className="message-meta">
                             <span className="time">{msg.hora}</span>
                             
-                            {/* NUEVA LÓGICA DE ESTADO EN TEXTO */}
+                            {/* RENDERIZADO DEL ESTADO (Tildes / Checks)
+                                Evaluamos la variable estado: 'enviado', 'recibido', 'leido' */}
                             {msg.tipo === 'me' && msg.estado && (
                                 <span className={`message-status ${msg.estado}`}>
                                     {msg.estado === 'enviado' && 'Mensaje enviado'}
@@ -40,6 +48,7 @@ const MessageWindow = ({ messages }) => {
                     </div>
                 ))
             )}
+            {/* Elemento ancla invisible usado por el useEffect para forzar el scroll inferior */}
             <div ref={endOfMessagesRef} />
         </div>
     );
