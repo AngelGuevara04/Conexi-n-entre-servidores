@@ -1,55 +1,86 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { connect, send } from './websocket';
 import MessageWindow from './MessageWindow';
 import TextBar from './TextBar';
 import './App.css'; 
 
 function App() {
-    // --- ESTADOS ---
     const [identificado, setIdentificado] = useState(false);
     const [nombre, setNombre] = useState("");
-    const [usuarios, setUsuarios] = useState([]); // Todos los conectados
-    
-    // NUEVOS ESTADOS: Estilo WhatsApp
-    const [chatsAbiertos, setChatsAbiertos] = useState(["Todos"]); // Solo los chats activos
-    const [vistaContactos, setVistaContactos] = useState(false);   // Para alternar la barra lateral
-    const [busqueda, setBusqueda] = useState("");                  // Para el buscador de contactos
-    
+    const [usuarios, setUsuarios] = useState([]);
+    const [chatsAbiertos, setChatsAbiertos] = useState(["Todos"]);
+    const [vistaContactos, setVistaContactos] = useState(false);
+    const [busqueda, setBusqueda] = useState("");
     const [chatActivo, setChatActivo] = useState("Todos");
     const [historiales, setHistoriales] = useState({ Todos: [] });
+    const [noLeidos, setNoLeidos] = useState({});
+    
+    const chatActivoRef = useRef(chatActivo);
+    useEffect(() => {
+        chatActivoRef.current = chatActivo;
+    }, [chatActivo]);
 
-    // --- LÓGICA DE BÚSQUEDA ---
-    // Filtramos los usuarios en tiempo real basados en lo que se escriba en el buscador
     const usuariosFiltrados = usuarios.filter(u => 
         u.toLowerCase().includes(busqueda.toLowerCase())
     );
 
-    // --- CONEXIÓN ---
     const iniciarConexion = () => {
         if (!nombre.trim()) return alert("Ingresa un nombre");
 
         connect(
             (incoming) => {
-                if (incoming.mensaje === "IDENTIFICATE") {
-                    send("IDENTIFICACION", nombre);
+                if (incoming.mensaje === "IDENTIFICATE") send("IDENTIFICACION", nombre);
+                if (incoming.mensaje === "IDENTIFICACION_EXITOSA") {
                     send("CONECTADOS");
                     setIdentificado(true);
                 }
-                if (incoming.mensaje === "CONECTADOS" && incoming.data) {
-                    setUsuarios(incoming.data);
-                }
+                if (incoming.mensaje === "ERROR") alert(incoming.data); 
+                if (incoming.mensaje === "CONECTADOS" && incoming.data) setUsuarios(incoming.data);
+                
                 if (incoming.mensaje === "CHAT" && incoming.data) {
-                    gestionarMensajeEntrante(incoming.data.emisor, incoming.data.mensaje);
+                    gestionarMensajeEntrante(
+                        incoming.data.emisor, 
+                        incoming.data.mensaje, 
+                        incoming.data.id, 
+                        incoming.data.hora
+                    );
+                }
+
+                // NUEVO: Escuchamos cuando el otro recibe en su celular (2 palomitas grises)
+                if (incoming.mensaje === "CONFIRMACION_RECEPCION" && incoming.data) {
+                    actualizarEstadoMensaje(incoming.data.receptor, incoming.data.idMensaje, 'recibido');
+                }
+
+                // Escuchamos cuando el otro abre el chat (2 palomitas azules)
+                if (incoming.mensaje === "CONFIRMACION_LECTURA" && incoming.data) {
+                    actualizarEstadoMensaje(incoming.data.lector, incoming.data.idMensaje, 'leido');
                 }
             },
-            () => { alert("Desconectado"); window.location.reload(); }
+            () => { alert("Conexión perdida con el servidor."); window.location.reload(); }
         );
 
         setInterval(() => send("CONECTADOS"), 3000);
     };
 
-    // --- GESTIÓN DE MENSAJES ---
-    const gestionarMensajeEntrante = (emisor, texto) => {
+    // FUNCIÓN ÚNICA PARA CAMBIAR EL ESTADO DEL CHECK
+    const actualizarEstadoMensaje = (sala, idMensaje, nuevoEstado) => {
+        setHistoriales(prev => {
+            if (!prev[sala]) return prev;
+            return {
+                ...prev,
+                [sala]: prev[sala].map(msg => {
+                    if (msg.id === idMensaje) {
+                        // Evita que un mensaje 'leido' regrese a 'recibido' por lag de red
+                        if (msg.estado === 'leido') return msg;
+                        return { ...msg, estado: nuevoEstado };
+                    }
+                    return msg;
+                })
+            };
+        });
+    };
+
+    const gestionarMensajeEntrante = (emisor, texto, idMensaje, hora) => {
         let sala = emisor;
         let limpio = texto;
 
@@ -58,9 +89,11 @@ function App() {
             limpio = texto.replace("[GLOBAL]", "");
         } else if (texto.startsWith("[PRIVADO]")) {
             limpio = texto.replace("[PRIVADO]", "");
+            
+            // NUEVO: AVISAMOS AL INSTANTE QUE EL MENSAJE LLEGÓ AL NAVEGADOR
+            send("MENSAJE_RECIBIDO", { idMensaje: idMensaje, autorOriginal: emisor });
         }
 
-        // MAGIA WHATSAPP: Si alguien te escribe y no tenías su chat abierto, se abre automáticamente
         setChatsAbiertos(prev => {
             if (!prev.includes(sala)) return [sala, ...prev];
             return prev;
@@ -68,47 +101,99 @@ function App() {
 
         setHistoriales(prev => ({
             ...prev,
-            [sala]: [...(prev[sala] || []), { autor: emisor, texto: limpio, tipo: 'other' }]
+            [sala]: [...(prev[sala] || []), { 
+                id: idMensaje, 
+                autor: emisor, 
+                texto: limpio, 
+                tipo: 'other', 
+                hora: hora,
+                reportadoComoLeido: false
+            }]
         }));
+
+        if (sala !== chatActivoRef.current) {
+            setNoLeidos(prev => ({ ...prev, [sala]: (prev[sala] || 0) + 1 }));
+        } 
+        else if (sala !== "Todos") {
+            // Si ya estamos viendo el chat, mandamos confirmación de LECTURA al instante
+            send("MENSAJE_LEIDO", { idMensaje: idMensaje, autorOriginal: emisor });
+            setHistoriales(prev => ({
+                ...prev,
+                [sala]: prev[sala].map(m => m.id === idMensaje ? {...m, reportadoComoLeido: true} : m)
+            }));
+        }
     };
 
     const handleSendMessage = (texto) => {
         const prefijo = chatActivo === "Todos" ? "[GLOBAL]" : "[PRIVADO]";
         const receptores = chatActivo === "Todos" ? usuarios : [chatActivo];
+        
+        const idUnico = Date.now().toString() + Math.floor(Math.random() * 1000);
+        const horaActual = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-        send("CHAT", { receptor: receptores, mensaje: prefijo + texto });
+        send("CHAT", { receptor: receptores, mensaje: prefijo + texto, id: idUnico, hora: horaActual });
 
         setHistoriales(prev => ({
             ...prev,
-            [chatActivo]: [...(prev[chatActivo] || []), { autor: "Tú", texto: texto, tipo: 'me' }]
+            [chatActivo]: [...(prev[chatActivo] || []), { 
+                id: idUnico, 
+                autor: "Tú", 
+                texto: texto, 
+                tipo: 'me', 
+                estado: 'enviado', // Nace con 1 palomita
+                hora: horaActual
+            }]
         }));
     };
 
-    // ACCIÓN WHATSAPP: Iniciar un nuevo chat desde la lista de contactos
-    const abrirChat = (usuario) => {
-        setChatsAbiertos(prev => {
-            if (!prev.includes(usuario)) return [usuario, ...prev]; // Lo pone hasta arriba
-            return prev;
-        });
-        setChatActivo(usuario);
-        setVistaContactos(false); // Regresa a la vista normal de chats
-        setBusqueda("");          // Limpia el buscador para la próxima vez
+    const cambiarChat = (chat) => {
+        setChatActivo(chat);
+        setNoLeidos(prev => ({ ...prev, [chat]: 0 }));
+
+        if (chat !== "Todos") {
+            setHistoriales(prev => {
+                const chatHistory = prev[chat] || [];
+                let huboCambios = false;
+                
+                const updatedHistory = chatHistory.map(msg => {
+                    if (msg.tipo === 'other' && !msg.reportadoComoLeido) {
+                        send("MENSAJE_LEIDO", { idMensaje: msg.id, autorOriginal: msg.autor });
+                        huboCambios = true;
+                        return { ...msg, reportadoComoLeido: true };
+                    }
+                    return msg;
+                });
+
+                if (huboCambios) return { ...prev, [chat]: updatedHistory };
+                return prev;
+            });
+        }
     };
 
-    // --- RENDERIZADO VISUAL ---
+    const abrirChat = (usuario) => {
+        setChatsAbiertos(prev => {
+            if (!prev.includes(usuario)) return [usuario, ...prev];
+            return prev;
+        });
+        cambiarChat(usuario); 
+        setVistaContactos(false);
+        setBusqueda("");
+    };
+
     if (!identificado) {
         return (
             <div className="login-container">
                 <div className="card">
-                    <h2>Bienvenido al Chat</h2>
+                    <h2>Chat Pro</h2>
+                    <p>Ingresa tu nombre para comenzar</p>
                     <input 
                         type="text" 
                         value={nombre} 
                         onChange={e => setNombre(e.target.value)} 
                         onKeyPress={e => e.key === 'Enter' && iniciarConexion()}
-                        placeholder="Tu nombre..." 
+                        placeholder="Ej: Angel04" 
                     />
-                    <button onClick={iniciarConexion}>Entrar</button>
+                    <button onClick={iniciarConexion}>Entrar al Chat</button>
                 </div>
             </div>
         );
@@ -116,31 +201,24 @@ function App() {
 
     return (
         <div className="app-container">
-            {/* --- BARRA LATERAL ESTILO WHATSAPP --- */}
             <aside className="sidebar">
-                
                 {vistaContactos ? (
-                    /* VISTA 2: LISTA DE CONTACTOS PARA NUEVO CHAT (CON BUSCADOR) */
                     <>
                         <div className="sidebar-header slide-header">
                             <button className="icon-btn" onClick={() => { setVistaContactos(false); setBusqueda(""); }}>←</button>
-                            <h3>Nuevo Chat</h3>
+                            <h3>Contactos</h3>
                         </div>
-                        
-                        {/* CONTENEDOR DEL BUSCADOR */}
                         <div className="search-container">
                             <input 
                                 type="text" 
-                                placeholder="Buscar contacto..." 
+                                placeholder="Buscar..." 
                                 value={busqueda}
                                 onChange={(e) => setBusqueda(e.target.value)}
                             />
                         </div>
-
-                        {/* LISTA VERTICAL FILTRADA */}
                         <div className="user-list vertical-list">
                             {usuariosFiltrados.length === 0 ? (
-                                <p className="empty-msg">No se encontraron usuarios</p>
+                                <p className="empty-msg">No hay nadie más conectado</p>
                             ) : (
                                 usuariosFiltrados.map(u => (
                                     <div key={u} className="tab" onClick={() => abrirChat(u)}>
@@ -155,25 +233,25 @@ function App() {
                         </div>
                     </>
                 ) : (
-                    /* VISTA 1: CHATS ACTIVOS (HISTORIAL) */
                     <>
                         <div className="sidebar-header">
-                            <h3>Chats</h3>
-                            <button className="new-chat-btn" onClick={() => setVistaContactos(true)} title="Nuevo Chat">
-                                ➕
-                            </button>
+                            <h3>Mis Chats</h3>
+                            <button className="new-chat-btn" onClick={() => setVistaContactos(true)}>➕</button>
                         </div>
                         <div className="user-list">
                             {chatsAbiertos.map(chat => (
                                 <div 
                                     key={chat} 
                                     className={`tab ${chatActivo === chat ? "active-tab" : ""}`}
-                                    onClick={() => setChatActivo(chat)}
+                                    onClick={() => cambiarChat(chat)}
                                 >
                                     <div className="avatar">{chat === "Todos" ? "🌐" : "👤"}</div>
                                     <div className="tab-info">
                                         <span className="tab-name">{chat === "Todos" ? "Sala General" : chat}</span>
                                     </div>
+                                    {noLeidos[chat] > 0 && (
+                                        <div className="unread-badge">{noLeidos[chat]}</div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -181,10 +259,9 @@ function App() {
                 )}
             </aside>
 
-            {/* --- VENTANA DE CHAT --- */}
             <main className="chat-window">
                 <header className="chat-header">
-                    Conversando con: <strong>{chatActivo === 'Todos' ? 'Sala General' : chatActivo}</strong>
+                    Chat con: <strong>{chatActivo === 'Todos' ? 'Sala General' : chatActivo}</strong>
                 </header>
                 <MessageWindow messages={historiales[chatActivo] || []} />
                 <TextBar onSend={handleSendMessage} />

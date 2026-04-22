@@ -1,47 +1,67 @@
-/* El contenedor toma TODO el ancho disponible */
 .text-bar {
   display: flex;
   width: 100%;
   background-color: #f0f2f5;
-  padding: 10px 15px; /* Espacio para que no toque los bordes del celular */
+  padding: 10px 15px;
   box-sizing: border-box;
-  /* Quitamos el gap para que el input y el botón se peguen */
-  gap: 0; 
+  gap: 0;
   z-index: 10;
 }
 
-/* Caja para escribir */
-.text-bar input {
-  flex: 1; 
+.input-wrapper {
+  flex: 1;
+  display: flex;
+  position: relative;
+  align-items: center;
+}
+
+.input-wrapper input {
+  width: 100%;
   border: none;
-  border-radius: 25px 0 0 25px; /* Borde redondo a la izquierda */
-  padding: 14px 20px;
+  border-radius: 25px 0 0 25px;
+  padding: 14px 60px 14px 20px; /* Margen derecho para que el texto no tape el contador */
   font-size: 1rem;
   outline: none;
   background-color: #ffffff;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 
-/* El botón de la flecha */
+.char-counter {
+  position: absolute;
+  right: 15px;
+  font-size: 0.75rem;
+  color: #8696a0;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.limit-reached {
+  color: #ea0038; /* Rojo cuando llegas al límite */
+}
+
 .text-bar button {
   background-color: #00a884;
   color: white;
   border: none;
-  border-radius: 0 25px 25px 0; /* Borde redondo a la derecha */
+  border-radius: 0 25px 25px 0;
   padding: 0 20px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-  transition: background-color 0.2s;
+  transition: all 0.2s ease;
 }
 
-.text-bar button:hover {
+.text-bar button:hover:not(:disabled) {
   background-color: #008f6f;
 }
 
-/* Flecha centrada */
+/* Estilo cuando el botón está bloqueado */
+.text-bar button:disabled {
+  background-color: #cbd5d0;
+  cursor: not-allowed;
+  color: #a0a0a0;
+}
+
 .text-bar button svg {
   margin-left: 2px;
 }

@@ -4,15 +4,29 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  /* Opcional: Un patrón sutil de fondo tipo WhatsApp */
+  gap: 10px;
   background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
   background-repeat: repeat;
   background-size: 400px;
 }
 
+.empty-chat-msg {
+  text-align: center;
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
+.empty-chat-msg span {
+  background-color: #ffeecd;
+  padding: 8px 15px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: #54656f;
+  box-shadow: 0 1px 1px rgba(0,0,0,0.05);
+}
+
 .message {
-  padding: 10px 14px;
+  padding: 8px 10px 4px 10px; 
   border-radius: 8px;
   max-width: 65%;
   position: relative;
@@ -20,27 +34,54 @@
   line-height: 1.4;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
   word-wrap: break-word;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Diseño de MI mensaje */
 .me {
-  background-color: #d9fdd3; /* Verde claro moderno */
+  background-color: #d9fdd3;
   color: #111b21;
   align-self: flex-end;
-  border-top-right-radius: 0; /* Efecto de burbuja hablada */
+  border-top-right-radius: 0;
 }
 
-/* Diseño del mensaje de OTROS */
 .other {
   background-color: #ffffff;
   color: #111b21;
   align-self: flex-start;
-  border-top-left-radius: 0; /* Efecto de burbuja hablada */
+  border-top-left-radius: 0;
 }
 
 .author {
   font-size: 0.75rem;
-  color: #667781;
+  color: #00a884; 
   font-weight: 700;
-  display: block;
+  margin-bottom: 2px;
+}
+
+.text-content {
+  padding-bottom: 5px; 
+}
+
+.message-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  margin-top: -5px; 
+}
+
+.time {
+  font-size: 0.65rem;
+  color: #667781;
+}
+
+.check-status {
+  font-size: 0.7rem;
+  color: #8696a0; 
+  letter-spacing: -2px; 
+}
+
+.check-status.read {
+  color: #53bdeb; /* Color azul de visto */
 }
