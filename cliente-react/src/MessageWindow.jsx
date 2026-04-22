@@ -4,6 +4,7 @@ import './MessageWindow.css';
 const MessageWindow = ({ messages }) => {
     const endOfMessagesRef = useRef(null);
 
+    // Auto-scroll al recibir o enviar mensajes
     useEffect(() => {
         endOfMessagesRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
@@ -17,17 +18,22 @@ const MessageWindow = ({ messages }) => {
             ) : (
                 messages.map((msg, idx) => (
                     <div key={msg.id || idx} className={`message ${msg.tipo}`}>
+                        {/* Autor (solo si es de otra persona) */}
                         {msg.tipo === 'other' && <span className="author">{msg.autor}</span>}
                         
+                        {/* Contenido del mensaje */}
                         <div className="text-content">{msg.texto}</div>
                         
+                        {/* Metadatos (Hora y Estado) */}
                         <div className="message-meta">
                             <span className="time">{msg.hora}</span>
                             
-                            {/* LOGICA DE CHECKMARKS TIPO WHATSAPP */}
+                            {/* NUEVA LÓGICA DE ESTADO EN TEXTO */}
                             {msg.tipo === 'me' && msg.estado && (
-                                <span className={`check-status ${msg.estado === 'leido' ? 'read' : ''}`}>
-                                    {msg.estado === 'enviado' ? '✓' : '✓✓'}
+                                <span className={`message-status ${msg.estado}`}>
+                                    {msg.estado === 'enviado' && 'Mensaje enviado'}
+                                    {msg.estado === 'recibido' && 'Mensaje entregado'}
+                                    {msg.estado === 'leido' && 'Mensaje leído'}
                                 </span>
                             )}
                         </div>

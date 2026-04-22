@@ -5,53 +5,64 @@ import TextBar from './TextBar';
 import './App.css'; 
 
 function App() {
-    const [identificado, setIdentificado] = useState(false);
-    const [nombre, setNombre] = useState("");
-    const [usuarios, setUsuarios] = useState([]);
-    const [chatsAbiertos, setChatsAbiertos] = useState(["Todos"]);
-    const [vistaContactos, setVistaContactos] = useState(false);
-    const [busqueda, setBusqueda] = useState("");
-    const [chatActivo, setChatActivo] = useState("Todos");
-    const [historiales, setHistoriales] = useState({ Todos: [] });
-    const [noLeidos, setNoLeidos] = useState({});
-    
+    // ==========================================
+    // BLOQUE 1: ESTADOS (VARIABLES MÁGICAS DE REACT)
+    // ==========================================
+    const [identificado, setIdentificado] = useState(false); // ¿Ya entró al chat?
+    const [nombre, setNombre] = useState("");                // Nombre del usuario
+    const [usuarios, setUsuarios] = useState([]);            // Lista de todos los conectados
+    const [chatsAbiertos, setChatsAbiertos] = useState(["Todos"]); // Pestañas en la barra lateral
+    const [vistaContactos, setVistaContactos] = useState(false);   // ¿Estamos viendo los contactos o los chats?
+    const [busqueda, setBusqueda] = useState("");            // Texto del buscador de contactos
+    const [chatActivo, setChatActivo] = useState("Todos");   // Chat que se está viendo en pantalla
+    const [historiales, setHistoriales] = useState({ Todos: [] }); // Diccionario con los mensajes de cada chat
+    const [noLeidos, setNoLeidos] = useState({});            // Contador del circulito verde
+
+    // Referencia para saber siempre en qué chat estamos (útil para el WebSocket)
     const chatActivoRef = useRef(chatActivo);
     useEffect(() => {
         chatActivoRef.current = chatActivo;
     }, [chatActivo]);
 
+    // Filtrado del buscador en tiempo real
     const usuariosFiltrados = usuarios.filter(u => 
         u.toLowerCase().includes(busqueda.toLowerCase())
     );
 
+    // ==========================================
+    // BLOQUE 2: CONEXIÓN AL SERVIDOR WEBSOCKET
+    // ==========================================
     const iniciarConexion = () => {
         if (!nombre.trim()) return alert("Ingresa un nombre");
 
         connect(
             (incoming) => {
+                // El servidor nos saluda y pide nombre
                 if (incoming.mensaje === "IDENTIFICATE") send("IDENTIFICACION", nombre);
+                
+                // El servidor aprueba nuestro nombre
                 if (incoming.mensaje === "IDENTIFICACION_EXITOSA") {
                     send("CONECTADOS");
                     setIdentificado(true);
                 }
+                
+                // El servidor rechaza el nombre (está repetido)
                 if (incoming.mensaje === "ERROR") alert(incoming.data); 
+                
+                // Actualiza la lista de conectados
                 if (incoming.mensaje === "CONECTADOS" && incoming.data) setUsuarios(incoming.data);
                 
+                // Alguien nos envió un mensaje
                 if (incoming.mensaje === "CHAT" && incoming.data) {
-                    gestionarMensajeEntrante(
-                        incoming.data.emisor, 
-                        incoming.data.mensaje, 
-                        incoming.data.id, 
-                        incoming.data.hora
-                    );
+                    gestionarMensajeEntrante(incoming.data.emisor, incoming.data.mensaje, incoming.data.id, incoming.data.hora);
                 }
 
-                // NUEVO: Escuchamos cuando el otro recibe en su celular (2 palomitas grises)
+                // El celular del otro usuario confirma que le LLEGÓ el mensaje (doble check gris)
                 if (incoming.mensaje === "CONFIRMACION_RECEPCION" && incoming.data) {
                     actualizarEstadoMensaje(incoming.data.receptor, incoming.data.idMensaje, 'recibido');
                 }
 
-                // Escuchamos cuando el otro abre el chat (2 palomitas azules)
+                // El otro usuario ABRIÓ nuestra ventana de chat (doble check azul)
                 if (incoming.mensaje === "CONFIRMACION_LECTURA" && incoming.data) {
                     actualizarEstadoMensaje(incoming.data.lector, incoming.data.idMensaje, 'leido');
                 }
@@ -59,10 +70,15 @@ function App() {
             () => { alert("Conexión perdida con el servidor."); window.location.reload(); }
         );
 
+        // Pedimos actualización de usuarios cada 3 segundos
         setInterval(() => send("CONECTADOS"), 3000);
     };
 
-    // FUNCIÓN ÚNICA PARA CAMBIAR EL ESTADO DEL CHECK
+    // ==========================================
+    // BLOQUE 3: RECEPCIÓN DE MENSAJES Y ESTADOS
+    // ==========================================
+    
+    // Función que cambia un check de 'enviado' a 'recibido' o 'leido'
     const actualizarEstadoMensaje = (sala, idMensaje, nuevoEstado) => {
         setHistoriales(prev => {
             if (!prev[sala]) return prev;
@@ -70,7 +86,7 @@ function App() {
                 ...prev,
                 [sala]: prev[sala].map(msg => {
                     if (msg.id === idMensaje) {
-                        // Evita que un mensaje 'leido' regrese a 'recibido' por lag de red
+                        // Evitamos que un check azul se vuelva gris por error de internet
                         if (msg.estado === 'leido') return msg;
                         return { ...msg, estado: nuevoEstado };
                     }
@@ -80,6 +96,7 @@ function App() {
         });
     };
 
+    // Cuando recibes un mensaje de otra persona
     const gestionarMensajeEntrante = (emisor, texto, idMensaje, hora) => {
         let sala = emisor;
         let limpio = texto;
@@ -89,16 +106,17 @@ function App() {
             limpio = texto.replace("[GLOBAL]", "");
         } else if (texto.startsWith("[PRIVADO]")) {
             limpio = texto.replace("[PRIVADO]", "");
-            
-            // NUEVO: AVISAMOS AL INSTANTE QUE EL MENSAJE LLEGÓ AL NAVEGADOR
+            // Avisamos DE INMEDIATO que el mensaje llegó a nuestro dispositivo
             send("MENSAJE_RECIBIDO", { idMensaje: idMensaje, autorOriginal: emisor });
         }
 
+        // Abre la pestaña de ese chat si no existía
         setChatsAbiertos(prev => {
             if (!prev.includes(sala)) return [sala, ...prev];
             return prev;
         });
 
+        // Guarda el mensaje en el historial
         setHistoriales(prev => ({
             ...prev,
             [sala]: [...(prev[sala] || []), { 
@@ -111,11 +129,13 @@ function App() {
             }]
         }));
 
+        // LÓGICA DE NOTIFICACIONES (El circulito verde)
         if (sala !== chatActivoRef.current) {
+            // Si NO estoy viendo ese chat, súmale 1 al círculo verde
             setNoLeidos(prev => ({ ...prev, [sala]: (prev[sala] || 0) + 1 }));
         } 
         else if (sala !== "Todos") {
-            // Si ya estamos viendo el chat, mandamos confirmación de LECTURA al instante
+            // Si SÍ estoy viendo el chat, le aviso al otro que ya lo leí (check azul)
             send("MENSAJE_LEIDO", { idMensaje: idMensaje, autorOriginal: emisor });
             setHistoriales(prev => ({
                 ...prev,
@@ -124,15 +144,21 @@ function App() {
         }
     };
 
+    // ==========================================
+    // BLOQUE 4: ENVÍO DE MENSAJES (TUYOS)
+    // ==========================================
     const handleSendMessage = (texto) => {
         const prefijo = chatActivo === "Todos" ? "[GLOBAL]" : "[PRIVADO]";
         const receptores = chatActivo === "Todos" ? usuarios : [chatActivo];
         
+        // Creamos un ID único y sacamos la hora actual
         const idUnico = Date.now().toString() + Math.floor(Math.random() * 1000);
         const horaActual = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+        // Lo mandamos al servidor
         send("CHAT", { receptor: receptores, mensaje: prefijo + texto, id: idUnico, hora: horaActual });
 
+        // Lo guardamos en nuestra propia pantalla con estado 'enviado' (1 palomita)
         setHistoriales(prev => ({
             ...prev,
             [chatActivo]: [...(prev[chatActivo] || []), { 
@@ -140,16 +166,22 @@ function App() {
                 autor: "Tú", 
                 texto: texto, 
                 tipo: 'me', 
-                estado: 'enviado', // Nace con 1 palomita
+                estado: 'enviado', 
                 hora: horaActual
             }]
         }));
     };
 
+    // ==========================================
+    // BLOQUE 5: CAMBIO DE CHATS Y MENÚS
+    // ==========================================
+    
+    // Cuando haces clic en una pestaña de chat
     const cambiarChat = (chat) => {
         setChatActivo(chat);
-        setNoLeidos(prev => ({ ...prev, [chat]: 0 }));
+        setNoLeidos(prev => ({ ...prev, [chat]: 0 })); // Borra el círculo verde
 
+        // Busca si hay mensajes sin leer en ese chat y manda el check azul
         if (chat !== "Todos") {
             setHistoriales(prev => {
                 const chatHistory = prev[chat] || [];
@@ -170,16 +202,22 @@ function App() {
         }
     };
 
+    // Cuando buscas a alguien nuevo e inicias chat
     const abrirChat = (usuario) => {
         setChatsAbiertos(prev => {
             if (!prev.includes(usuario)) return [usuario, ...prev];
             return prev;
         });
         cambiarChat(usuario); 
-        setVistaContactos(false);
-        setBusqueda("");
+        setVistaContactos(false); // Cierra la pantalla de contactos
+        setBusqueda("");          // Limpia el buscador
     };
 
+    // ==========================================
+    // BLOQUE 6: RENDERIZADO VISUAL (INTERFAZ HTML)
+    // ==========================================
+    
+    // PANTALLA DE LOGIN
     if (!identificado) {
         return (
             <div className="login-container">
@@ -199,10 +237,13 @@ function App() {
         );
     }
 
+    // PANTALLA PRINCIPAL DEL CHAT
     return (
         <div className="app-container">
+            {/* PANEL LATERAL IZQUIERDO */}
             <aside className="sidebar">
                 {vistaContactos ? (
+                    // VISTA 2: LISTA DE CONTACTOS PARA NUEVO CHAT
                     <>
                         <div className="sidebar-header slide-header">
                             <button className="icon-btn" onClick={() => { setVistaContactos(false); setBusqueda(""); }}>←</button>
@@ -233,6 +274,7 @@ function App() {
                         </div>
                     </>
                 ) : (
+                    // VISTA 1: CHATS ACTIVOS Y SALA GENERAL
                     <>
                         <div className="sidebar-header">
                             <h3>Mis Chats</h3>
@@ -259,11 +301,14 @@ function App() {
                 )}
             </aside>
 
+            {/* PANEL DERECHO: CONVERSACIÓN */}
             <main className="chat-window">
                 <header className="chat-header">
                     Chat con: <strong>{chatActivo === 'Todos' ? 'Sala General' : chatActivo}</strong>
                 </header>
+                {/* Dibuja las burbujas */}
                 <MessageWindow messages={historiales[chatActivo] || []} />
+                {/* Dibuja la barra de texto */}
                 <TextBar onSend={handleSendMessage} />
             </main>
         </div>

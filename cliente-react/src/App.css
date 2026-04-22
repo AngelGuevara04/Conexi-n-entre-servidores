@@ -332,3 +332,30 @@
     padding: 25px;
   }
 }
+
+/* --- NUEVOS ESTILOS PARA EL MODO PRUEBA --- */
+.login-options {
+  margin-bottom: 20px;
+  text-align: left;
+  background-color: #f0f2f5;
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+  color: #111b21;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: #00a884; /* Cambia el color por defecto del check a tu verde */
+}

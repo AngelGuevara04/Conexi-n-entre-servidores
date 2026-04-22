@@ -61,14 +61,16 @@
 
 .text-content {
   padding-bottom: 5px; 
+  white-space: pre-wrap; 
+  word-break: break-word; 
 }
 
 .message-meta {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 5px;
-  margin-top: -5px; 
+  gap: 6px; /* Separación entre la hora y el texto de estado */
+  margin-top: -3px; 
 }
 
 .time {
@@ -76,12 +78,26 @@
   color: #667781;
 }
 
-.check-status {
-  font-size: 0.7rem;
-  color: #8696a0; 
-  letter-spacing: -2px; 
+/* =========================================
+   NUEVOS ESTILOS PARA EL TEXTO DE ESTADO
+   ========================================= */
+.message-status {
+  font-size: 0.65rem;
+  font-style: italic; /* Cursiva para distinguirlo de un mensaje normal */
 }
 
-.check-status.read {
-  color: #53bdeb; /* Color azul de visto */
+/* 1. Recién sale de tu celular hacia el servidor */
+.message-status.enviado {
+  color: #8696a0; 
+}
+
+/* 2. Ya le llegó al celular de la otra persona */
+.message-status.recibido {
+  color: #54656f; /* Un gris un poco más oscuro y sólido */
+}
+
+/* 3. La otra persona abrió tu chat */
+.message-status.leido {
+  color: #00a884; /* Verde pro para hacer match con el botón de enviar */
+  font-weight: 600; /* Lo hacemos un poquito más gordito para que resalte */
 }
