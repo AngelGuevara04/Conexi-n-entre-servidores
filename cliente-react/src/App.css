@@ -1,4 +1,4 @@
-/* --- PANTALLA DE LOGIN --- */
+/* BLOQUE 1: PANTALLA DE LOGIN */
 .login-container {
   display: flex;
   align-items: center;
@@ -43,9 +43,14 @@
   font-size: 16px;
   font-weight: bold;
   cursor: pointer;
+  transition: background-color 0.2s;
 }
 
-/* --- CONTENEDOR PRINCIPAL (APP) --- */
+.card button:hover {
+  background-color: #008f6f;
+}
+
+/* BLOQUE 2: ESTRUCTURA PRINCIPAL */
 .app-container {
   display: flex;
   height: 100vh;
@@ -53,7 +58,7 @@
   overflow: hidden;
 }
 
-/* --- BARRA LATERAL (SIDEBAR) ESTILO WHATSAPP --- */
+/* BLOQUE 3: BARRA LATERAL (SIDEBAR) Y PERFIL */
 .sidebar {
   width: 340px;
   background-color: #ffffff; 
@@ -61,6 +66,33 @@
   display: flex;
   flex-direction: column;
   border-right: 1px solid #d1d7db;
+}
+
+.sidebar-profile {
+  display: flex;
+  align-items: center;
+  padding: 15px 20px;
+  background-color: #202c33; 
+  color: white;
+  border-bottom: 1px solid #313d45;
+  gap: 15px;
+}
+
+.profile-avatar {
+  background-color: #6a7175;
+  color: #d1d7db;
+}
+
+.profile-name { 
+  font-weight: bold; 
+  font-size: 1.1rem; 
+  display: block;
+}
+
+.profile-status { 
+  font-size: 0.8rem; 
+  color: #00a884; 
+  display: block; 
 }
 
 .sidebar-header {
@@ -86,26 +118,29 @@
   height: 60px; 
 }
 
-.icon-btn {
+.icon-btn, .new-chat-btn {
   background: none;
   border: none;
+  cursor: pointer;
+}
+
+.icon-btn {
   color: white;
   font-size: 1.5rem;
-  cursor: pointer;
   padding: 0;
 }
 
 .new-chat-btn {
-  background: none;
-  border: none;
   font-size: 1.2rem;
-  cursor: pointer;
   transition: transform 0.2s;
 }
 
 .new-chat-btn:hover { transform: scale(1.1); }
 
-/* --- CONTENEDOR DEL BUSCADOR --- */
+.group-btn-add {
+  margin-right: 12px;
+}
+
 .search-container {
   padding: 10px 15px;
   background-color: #ffffff;
@@ -123,7 +158,6 @@
   box-sizing: border-box; 
 }
 
-/* --- LISTA DE USUARIOS --- */
 .user-list {
   flex: 1;
   overflow-y: auto;
@@ -153,14 +187,11 @@
   gap: 15px;
   transition: background-color 0.2s ease;
   border-bottom: 1px solid #f0f2f5; 
-  position: relative; /* Importante para acomodar el badge */
+  position: relative; 
 }
 
 .tab:hover { background-color: #f5f6f6; }
-
-.active-tab {
-  background-color: #f0f2f5; 
-}
+.active-tab { background-color: #f0f2f5; }
 
 .avatar {
   width: 45px;
@@ -194,11 +225,8 @@
   color: #667781;
 }
 
-/* =========================================
-   🟢 BURBUJA DE NOTIFICACIÓN (NUEVO)
-   ========================================= */
 .unread-badge {
-  background-color: #25d366; /* Verde icónico de WhatsApp */
+  background-color: #25d366; 
   color: white;
   border-radius: 50px;
   padding: 0 6px;
@@ -209,18 +237,17 @@
   justify-content: center;
   font-size: 0.75rem;
   font-weight: 700;
-  margin-left: auto; /* Esto empuja la burbuja hasta la derecha */
+  margin-left: auto; 
   box-shadow: 0 1px 2px rgba(0,0,0,0.1);
   animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
 
-/* Pequeña animación cuando aparece la burbuja */
 @keyframes popIn {
   0% { transform: scale(0); }
   100% { transform: scale(1); }
 }
 
-/* --- ÁREA PRINCIPAL --- */
+/* BLOQUE 4: ÁREA DE CHAT Y BOTONES DE GRUPO */
 .chat-window {
   flex: 1;
   display: flex;
@@ -230,20 +257,67 @@
 }
 
 .chat-header {
-  padding: 18px 25px;
+  padding: 15px 25px;
   background-color: #f0f2f5;
   border-bottom: 1px solid #d1d7db;
   font-size: 1.1rem;
   color: #111b21;
   display: flex;
   align-items: center;
+  justify-content: space-between; /* Mantiene los botones alineados a la derecha */
   box-shadow: 0 1px 2px rgba(0,0,0,0.05);
   z-index: 10;
 }
 
-/* =========================================
-   📱 ADAPTACIÓN CELULAR INFALIBLE
-   ========================================= */
+.chat-header-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Diseño Premium para los botones de grupo */
+.group-admin-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.btn-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border-radius: 20px; /* Diseño estilo píldora */
+  border: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* Sombra elegante base */
+}
+
+/* Efecto de elevación al pasar el mouse */
+.btn-group:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+/* Efecto de hundimiento al hacer clic */
+.btn-group:active {
+  transform: translateY(0);
+}
+
+.btn-add {
+  background-color: #00a884;
+}
+.btn-add:hover { background-color: #008f6f; }
+
+.btn-delete {
+  background-color: #ea0038;
+}
+.btn-delete:hover { background-color: #c4002f; }
+
+/* BLOQUE 5: RESPONSIVIDAD */
 @media (max-width: 768px) {
   .app-container {
     flex-direction: column;
@@ -257,10 +331,8 @@
     border-bottom: 1px solid #2a3942;
   }
 
-  .sidebar h3 {
-    padding: 10px;
-    font-size: 0.95rem;
-  }
+  .sidebar h3 { padding: 10px; font-size: 0.95rem; }
+  .sidebar-profile { padding: 10px 15px; }
 
   .user-list {
     flex-direction: row; 
@@ -270,12 +342,8 @@
     scrollbar-width: none;
     flex: 0 0 auto;
   }
-  
   .user-list::-webkit-scrollbar { display: none; }
-
-  .vertical-list {
-    max-height: 40vh; 
-  }
+  .vertical-list { max-height: 40vh; }
 
   .tab {
     flex: 0 0 auto; 
@@ -285,7 +353,6 @@
     gap: 10px;
   }
 
-  /* Para móviles horizontales, ponemos el puntito encima del avatar */
   .tab .unread-badge {
     position: absolute;
     top: 5px;
@@ -296,7 +363,6 @@
     margin-left: 0;
   }
 
-  /* Para la lista vertical móvil, vuelve a su lugar */
   .vertical-list .tab .unread-badge {
     position: static;
     margin-left: auto;
@@ -322,13 +388,16 @@
     min-height: 0; 
   }
 
-  .chat-header {
-    padding: 12px 15px;
-    font-size: 0.95rem;
-  }
+  .chat-header { padding: 12px 15px; font-size: 0.95rem; }
+  .card { width: 90%; padding: 25px; }
 
-  .card {
-    width: 90%;
-    padding: 25px;
+  /* Ajuste para que los botones entren bien en la pantalla de celular */
+  .group-admin-actions {
+    flex-direction: column;
+    gap: 5px;
+  }
+  .btn-group {
+    padding: 6px 12px;
+    font-size: 0.75rem;
   }
 }

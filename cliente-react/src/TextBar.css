@@ -1,6 +1,4 @@
-/* angelguevara04/conexi-n-entre-servidores/cliente-react/src/TextBar.css */
-
-/* Contenedor principal: Centra la barra y da el fondo gris de la zona de escritura */
+/* BLOQUE 1: ESTRUCTURA EXTERNA DE LA BARRA */
 .text-bar-outer-container {
   display: flex;
   justify-content: center;
@@ -14,23 +12,82 @@
   z-index: 10;
 }
 
-/* Envoltura interna: Limita el ancho en computadoras */
+/* Envoltura interna principal */
 .text-bar-inner-wrapper {
   display: flex;
+  flex-direction: column; /* NUEVO: Clave para que la vista previa se apile arriba del texto */
   width: 100%;
-  max-width: 800px; /* Evita que en PC se vea demasiado larga */
+  max-width: 800px; /* Evita que la barra se vea súper alargada en PC */
   background-color: #ffffff;
-  border-radius: 25px; /* Bordes redondeados para un look moderno */
+  border-radius: 25px; 
   padding: 5px 10px 5px 15px;
-  align-items: flex-end; /* Alinea el botón al fondo si el texto crece */
   box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-  gap: 10px;
+}
+
+
+/* 
+   BLOQUE 2: VISTA PREVIA DE RESPUESTA (NUEVO)
+   Aparece como un bloque superior al intentar responder
+    */
+.reply-preview-container {
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center;
+  background-color: #e2e8f0; 
+  border-left: 4px solid #00a884; 
+  padding: 8px 10px; 
+  border-radius: 8px; 
+  margin-bottom: 8px; /* Crea una separación con el input de texto de abajo */
+  width: 100%; 
+  box-sizing: border-box;
+}
+
+.reply-preview-content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* Seguridad para que textos raros no rompan el Flexbox */
+}
+
+.reply-preview-author { 
+  font-size: 0.8rem; 
+  font-weight: bold; 
+  color: #00a884; 
+}
+
+.reply-preview-text { 
+  font-size: 0.85rem; 
+  color: #4a5568; 
+  margin: 0; 
+  white-space: nowrap; 
+  overflow: hidden; 
+  text-overflow: ellipsis; 
+}
+
+/* El botoncito de la "X" para cancelar */
+.cancel-reply-btn { 
+  background: none; 
+  border: none; 
+  cursor: pointer; 
+  color: #a0aec0; 
+  font-size: 1.2rem;
+  padding: 0 5px;
+}
+.cancel-reply-btn:hover { color: #ea0038; }
+
+
+/* BLOQUE 3: ZONA DE ESCRITURA Y TEXTAREA */
+/* Flex horizontal para acomodar el input y el botón verde juntos */
+.input-row { 
+  display: flex; 
+  width: 100%; 
+  gap: 10px; 
+  align-items: flex-end; 
 }
 
 .input-wrapper {
-  flex: 1;
+  flex: 1; 
   display: flex;
-  position: relative;
+  position: relative; /* Base para anclar el contador de forma absoluta */
   align-items: center;
   min-height: 40px;
 }
@@ -38,16 +95,17 @@
 .input-wrapper textarea {
   width: 100%;
   border: none;
-  padding: 10px 65px 10px 5px; /* Espacio para el contador a la derecha */
+  padding: 10px 65px 10px 5px; /* Espacio extra derecho para que el texto no pase por encima del contador */
   font-size: 1rem;
   outline: none;
   background-color: transparent;
-  resize: none; /* Evita que el usuario la estire manualmente */
+  resize: none; /* Bloquea al usuario para que no estire la caja a mano */
   font-family: inherit;
-  max-height: 150px; /* Límite de crecimiento hacia arriba */
+  max-height: 150px; /* Límite para que empiece a mostrar barra de scroll */
   overflow-y: auto;
 }
 
+/* Contador pequeño (ej. 14/250) */
 .char-counter {
   position: absolute;
   right: 10px;
@@ -55,49 +113,50 @@
   font-size: 0.7rem;
   color: #8696a0;
   font-weight: 600;
-  pointer-events: none;
+  pointer-events: none; /* Evita que si das clic ahí, pierdas el foco del texto */
   background: rgba(255, 255, 255, 0.8);
   padding: 2px 4px;
   border-radius: 4px;
 }
 
-.limit-reached {
-  color: #ea0038;
-}
+.limit-reached { color: #ea0038; }
 
+
+/* BLOQUE 4: BOTÓN DE ENVÍO */
 .send-button {
   background-color: #00a884;
   color: white;
   border: none;
-  border-radius: 50%; /* Botón circular */
+  border-radius: 50%;
   width: 40px;
   height: 40px;
-  min-width: 40px; /* Evita que se encoja */
+  min-width: 40px; 
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
-  margin-bottom: 3px; /* Pequeño ajuste visual */
+  margin-bottom: 3px; /* Lo sube ligerísimamente para alineación visual */
 }
 
 .send-button:hover:not(:disabled) {
   background-color: #008f6f;
-  transform: scale(1.05);
+  transform: scale(1.05); /* Efecto burbujeante al pasar el mouse */
 }
 
+/* Estado bloqueado cuando no hay texto válido */
 .send-button:disabled {
   background-color: #cbd5d0;
   cursor: not-allowed;
   color: #a0a0a0;
 }
 
-/* Ajustes para Pantallas Pequeñas (Celulares) */
+
+/* BLOQUE 5: RESPONSIVIDAD  */
 @media (max-width: 600px) {
-  .text-bar-outer-container {
-    padding: 8px 10px;
-  }
+  .text-bar-outer-container { padding: 8px 10px; }
   
+  /* En celular aprovechamos el 100% de la pantalla y achicamos la curva del borde */
   .text-bar-inner-wrapper {
     max-width: 100%;
     border-radius: 20px;

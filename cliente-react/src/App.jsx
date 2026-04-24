@@ -6,25 +6,20 @@ import './App.css';
 
 function App() {
     /**
-     * BLOQUE 1: ESTADO GLOBAL
+     * BLOQUE 1: ESTADO GLOBAL (DOM VIRTUAL)
      */
-    const [identificado, setIdentificado] = useState(false); // Bandera de autenticación
-    const [nombre, setNombre] = useState("");                // Credencial del usuario
-    const [usuarios, setUsuarios] = useState([]);            // Memoria de nodos activos en la red
+    const [identificado, setIdentificado] = useState(false); 
+    const [nombre, setNombre] = useState("");                
+    const [usuarios, setUsuarios] = useState([]);            
     const [chatsAbiertos, setChatsAbiertos] = useState(["Todos"]); 
     const [vistaContactos, setVistaContactos] = useState(false);   
     const [busqueda, setBusqueda] = useState("");            
-    const [chatActivo, setChatActivo] = useState("Todos");   // Puntero a la sala actual
-    
-    // Diccionario de historiales: Llave = Nombre del Contacto, Valor = Array de Mensajes
+    const [chatActivo, setChatActivo] = useState("Todos");   
     const [historiales, setHistoriales] = useState({ Todos: [] }); 
     const [noLeidos, setNoLeidos] = useState({});            
+    const [replyingTo, setReplyingTo] = useState(null); 
+    const [misGrupos, setMisGrupos] = useState([]);
 
-    /**
-     * MANEJO DE CONTEXTO ASÍNCRONO
-     * Como el callback del WebSocket no lee el estado de React en tiempo real,
-     * usamos un useRef para mantener un puntero inmutable al chat activo actual.
-     */
     const chatActivoRef = useRef(chatActivo);
     useEffect(() => {
         chatActivoRef.current = chatActivo;
@@ -38,33 +33,62 @@ function App() {
      * BLOQUE 2: PROTOCOLO DE CONEXIÓN Y HANDSHAKE
      */
     const iniciarConexion = () => {
-        if (!nombre.trim()) return alert("Ingresa un nombre");
+        if (!nombre.trim()) return alert("Ingresa un nombre válido");
+        if (nombre.trim().length > 20) return alert("Tu nombre no puede superar los 20 caracteres");
 
-        // Inicializa el túnel WS y mapea los comandos recibidos a funciones locales
         connect(
             (incoming) => {
-                // Etapa 1: Petición de identidad
                 if (incoming.mensaje === "IDENTIFICATE") send("IDENTIFICACION", nombre);
-                
-                // Etapa 2: Aprobación y solicitud del directorio de usuarios
                 if (incoming.mensaje === "IDENTIFICACION_EXITOSA") {
                     send("CONECTADOS");
                     setIdentificado(true);
                 }
-                
                 if (incoming.mensaje === "ERROR") alert(incoming.data); 
                 if (incoming.mensaje === "CONECTADOS" && incoming.data) setUsuarios(incoming.data);
                 
-                // Evento de Comunicación Principal
-                if (incoming.mensaje === "CHAT" && incoming.data) {
-                    gestionarMensajeEntrante(incoming.data.emisor, incoming.data.mensaje, incoming.data.id, incoming.data.hora);
+                if (incoming.mensaje === "MIS_GRUPOS") {
+                    setMisGrupos(incoming.data);
+                    setChatsAbiertos(prev => {
+                        const nombresGrupos = incoming.data.map(g => g.nombre);
+                        return [...new Set([...prev, ...nombresGrupos])];
+                    });
+                }
+                
+                if (incoming.mensaje === "GRUPO_CREADO") {
+                    setMisGrupos(p => [...p, incoming.data]);
+                    abrirChat(incoming.data.nombre);
                 }
 
-                // Callbacks de Estado de Mensaje (Checklist)
+                if (incoming.mensaje === "AGREGADO_A_GRUPO") {
+                    alert(`¡Te han agregado al grupo: ${incoming.data.nombre}!`);
+                    setMisGrupos(p => [...p, incoming.data]);
+                    setChatsAbiertos(p => {
+                        if (!p.includes(incoming.data.nombre)) return [incoming.data.nombre, ...p];
+                        return p;
+                    });
+                }
+
+                if (incoming.mensaje === "GRUPO_ELIMINADO") {
+                    alert(`El grupo '${incoming.data}' fue eliminado por su creador.`);
+                    setMisGrupos(p => p.filter(g => g.nombre !== incoming.data));
+                    setChatsAbiertos(p => p.filter(c => c !== incoming.data));
+                    if (chatActivoRef.current === incoming.data) cambiarChat("Todos");
+                }
+
+                if (incoming.mensaje === "CHAT" && incoming.data) {
+                    gestionarMensajeEntrante(
+                        incoming.data.emisor, 
+                        incoming.data.mensaje, 
+                        incoming.data.id, 
+                        incoming.data.hora,
+                        incoming.data.replyTo,
+                        incoming.data.nombreGrupo 
+                    );
+                }
+
                 if (incoming.mensaje === "CONFIRMACION_RECEPCION" && incoming.data) {
                     actualizarEstadoMensaje(incoming.data.receptor, incoming.data.idMensaje, 'recibido');
                 }
-
                 if (incoming.mensaje === "CONFIRMACION_LECTURA" && incoming.data) {
                     actualizarEstadoMensaje(incoming.data.lector, incoming.data.idMensaje, 'leido');
                 }
@@ -72,15 +96,45 @@ function App() {
             () => { alert("Conexión perdida con el servidor."); window.location.reload(); }
         );
 
-        // Polling: Solicita la lista de conectados cada 3 segundos (Evita desconexiones por inactividad)
         setInterval(() => send("CONECTADOS"), 3000);
     };
 
     /**
-     * BLOQUE 3: MUTACIÓN DEL HISTORIAL Y NOTIFICACIONES
+     * BLOQUE 3: LÓGICA DE GRUPOS SEGUROS
      */
-    
-    // Función mutadora pura: Actualiza el estado de un mensaje sin tocar el resto del historial
+    const crearGrupo = () => {
+        const nombreGrupo = window.prompt("Ingresa el nombre del nuevo grupo (Máximo 20 caracteres):");
+        if (nombreGrupo) {
+            const limpio = nombreGrupo.trim();
+            // 🚨 VALIDACIÓN: Impide crear grupos con nombres gigantes
+            if (limpio.length > 20) {
+                return alert("⚠️ El nombre del grupo no puede tener más de 20 caracteres.");
+            }
+            if (limpio !== "") send("CREAR_GRUPO", limpio);
+        }
+    };
+
+    const agregarMiembro = (nombreGrupo) => {
+        const nuevoMiembro = window.prompt("Ingresa el nombre EXACTO del usuario a agregar (Máx 20 caracteres):");
+        if (nuevoMiembro) {
+            const limpio = nuevoMiembro.trim();
+            // 🚨 VALIDACIÓN: Impide inyectar textos masivos
+            if (limpio.length > 20) {
+                return alert("⚠️ El nombre de usuario ingresado es demasiado largo.");
+            }
+            if (limpio !== "") send("AGREGAR_A_GRUPO", { nombreGrupo, nuevoMiembro: limpio });
+        }
+    };
+
+    const eliminarGrupo = (nombreGrupo) => {
+        if (window.confirm(`¿Estás seguro de eliminar el grupo '${nombreGrupo}'? Todos perderán el acceso.`)) {
+            send("ELIMINAR_GRUPO", nombreGrupo);
+        }
+    };
+
+    /**
+     * BLOQUE 4: MUTACIÓN DEL HISTORIAL Y NOTIFICACIONES
+     */
     const actualizarEstadoMensaje = (sala, idMensaje, nuevoEstado) => {
         setHistoriales(prev => {
             if (!prev[sala]) return prev;
@@ -88,7 +142,6 @@ function App() {
                 ...prev,
                 [sala]: prev[sala].map(msg => {
                     if (msg.id === idMensaje) {
-                        // Jerarquía de estados: Evitamos regresar a un estado inferior
                         if (msg.estado === 'leido') return msg;
                         return { ...msg, estado: nuevoEstado };
                     }
@@ -98,27 +151,26 @@ function App() {
         });
     };
 
-    const gestionarMensajeEntrante = (emisor, texto, idMensaje, hora) => {
-        let sala = emisor;
+    const gestionarMensajeEntrante = (emisor, texto, idMensaje, hora, replyTo, nombreGrupo) => {
+        let sala = nombreGrupo || emisor; 
         let limpio = texto;
 
-        // Decodificación del protocolo de metadatos ([GLOBAL] o [PRIVADO])
         if (texto.startsWith("[GLOBAL]")) {
             sala = "Todos";
             limpio = texto.replace("[GLOBAL]", "");
         } else if (texto.startsWith("[PRIVADO]")) {
             limpio = texto.replace("[PRIVADO]", "");
-            // Trigger automático: Acusamos recibo a nivel red (doble check gris)
+            send("MENSAJE_RECIBIDO", { idMensaje: idMensaje, autorOriginal: emisor });
+        } else if (texto.startsWith("[GRUPO]")) {
+            limpio = texto.replace("[GRUPO]", "");
             send("MENSAJE_RECIBIDO", { idMensaje: idMensaje, autorOriginal: emisor });
         }
 
-        // Abre la sesión del usuario si no existía en nuestra interfaz
         setChatsAbiertos(prev => {
             if (!prev.includes(sala)) return [sala, ...prev];
             return prev;
         });
 
-        // Inyección del mensaje en el árbol de estado
         setHistoriales(prev => ({
             ...prev,
             [sala]: [...(prev[sala] || []), { 
@@ -127,16 +179,15 @@ function App() {
                 texto: limpio, 
                 tipo: 'other', 
                 hora: hora,
-                reportadoComoLeido: false
+                reportadoComoLeido: false,
+                replyTo: replyTo 
             }]
         }));
 
-        // Lógica de Presencia: ¿El usuario está viendo la pantalla donde cayó el mensaje?
         if (sala !== chatActivoRef.current) {
             setNoLeidos(prev => ({ ...prev, [sala]: (prev[sala] || 0) + 1 }));
         } 
         else if (sala !== "Todos") {
-            // Si el usuario tiene la pestaña abierta, se marca como leído automáticamente
             send("MENSAJE_LEIDO", { idMensaje: idMensaje, autorOriginal: emisor });
             setHistoriales(prev => ({
                 ...prev,
@@ -146,19 +197,30 @@ function App() {
     };
 
     /**
-     * BLOQUE 4: EMISIÓN DE DATOS (TX)
+     * BLOQUE 5: EMISIÓN DE DATOS (TX)
      */
     const handleSendMessage = (texto) => {
-        const prefijo = chatActivo === "Todos" ? "[GLOBAL]" : "[PRIVADO]";
+        const currentGroup = misGrupos.find(g => g.nombre === chatActivo);
+        const isGroup = !!currentGroup;
+
+        const prefijo = chatActivo === "Todos" ? "[GLOBAL]" : (isGroup ? "[GRUPO]" : "[PRIVADO]");
         const receptores = chatActivo === "Todos" ? usuarios : [chatActivo];
         
-        // Generación de identificador único distribuido (UUID casero)
         const idUnico = Date.now().toString() + Math.floor(Math.random() * 1000);
         const horaActual = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-        send("CHAT", { receptor: receptores, mensaje: prefijo + texto, id: idUnico, hora: horaActual });
+        const payload = { 
+            receptor: receptores, 
+            mensaje: prefijo + texto, 
+            id: idUnico, 
+            hora: horaActual,
+            isGroup: isGroup, 
+            nombreGrupo: isGroup ? chatActivo : null
+        };
+        if (replyingTo) payload.replyTo = replyingTo;
 
-        // Optimistic UI Update: Agregamos el mensaje a nuestra pantalla antes de que el servidor conteste
+        send("CHAT", payload);
+
         setHistoriales(prev => ({
             ...prev,
             [chatActivo]: [...(prev[chatActivo] || []), { 
@@ -166,20 +228,23 @@ function App() {
                 autor: "Tú", 
                 texto: texto, 
                 tipo: 'me', 
-                estado: 'enviado', // Estado inicial por defecto (1 check)
-                hora: horaActual
+                estado: 'enviado', 
+                hora: horaActual,
+                replyTo: replyingTo 
             }]
         }));
+
+        setReplyingTo(null); 
     };
 
     /**
-     * BLOQUE 5: CONTROL DE VISTAS (ENRUTAMIENTO LOCAL)
+     * BLOQUE 6: CONTROL DE VISTAS (ENRUTAMIENTO)
      */
     const cambiarChat = (chat) => {
         setChatActivo(chat);
         setNoLeidos(prev => ({ ...prev, [chat]: 0 })); 
+        setReplyingTo(null); 
 
-        // Cuando entras a un chat, escanea mensajes pendientes de notificar lectura
         if (chat !== "Todos") {
             setHistoriales(prev => {
                 const chatHistory = prev[chat] || [];
@@ -210,11 +275,12 @@ function App() {
         setBusqueda("");          
     };
 
+    /**
+
+     * BLOQUE 7: RENDERIZADO VISUAL (INTERFAZ)
+
+     */
     
-    // BLOQUE 6: RENDERIZADO VISUAL (INTERFAZ HTML)
-    
-    
-    // PANTALLA DE LOGIN
     if (!identificado) {
         return (
             <div className="login-container">
@@ -227,6 +293,7 @@ function App() {
                         onChange={e => setNombre(e.target.value)} 
                         onKeyPress={e => e.key === 'Enter' && iniciarConexion()}
                         placeholder="Ej: Angel04" 
+                        maxLength={20} 
                     />
                     <button onClick={iniciarConexion}>Entrar al Chat</button>
                 </div>
@@ -234,13 +301,22 @@ function App() {
         );
     }
 
-    // PANTALLA PRINCIPAL DEL CHAT
+    const currentGroup = misGrupos.find(g => g.nombre === chatActivo);
+    const isCurrentChatGroup = !!currentGroup;
+    const isCreatorOfCurrentGroup = currentGroup && currentGroup.creador === nombre;
+
     return (
         <div className="app-container">
-            {/* PANEL LATERAL IZQUIERDO */}
             <aside className="sidebar">
+                <div className="sidebar-profile">
+                    <div className="avatar profile-avatar">👤</div>
+                    <div className="profile-info">
+                        <span className="profile-name">{nombre}</span>
+                        <span className="profile-status">En línea</span>
+                    </div>
+                </div>
+
                 {vistaContactos ? (
-                    // VISTA 2: LISTA DE CONTACTOS PARA NUEVO CHAT
                     <>
                         <div className="sidebar-header slide-header">
                             <button className="icon-btn" onClick={() => { setVistaContactos(false); setBusqueda(""); }}>←</button>
@@ -249,9 +325,10 @@ function App() {
                         <div className="search-container">
                             <input 
                                 type="text" 
-                                placeholder="Buscar..." 
+                                placeholder="Buscar contacto..." 
                                 value={busqueda}
                                 onChange={(e) => setBusqueda(e.target.value)}
+                                maxLength={50} 
                             />
                         </div>
                         <div className="user-list vertical-list">
@@ -271,42 +348,67 @@ function App() {
                         </div>
                     </>
                 ) : (
-                    // VISTA 1: CHATS ACTIVOS Y SALA GENERAL
                     <>
                         <div className="sidebar-header">
                             <h3>Mis Chats</h3>
-                            <button className="new-chat-btn" onClick={() => setVistaContactos(true)}>➕</button>
+                            <div>
+                                <button className="new-chat-btn group-btn-add" onClick={crearGrupo} title="Crear Grupo">👥</button>
+                                <button className="new-chat-btn" onClick={() => setVistaContactos(true)} title="Nuevo Chat">➕</button>
+                            </div>
                         </div>
                         <div className="user-list">
-                            {chatsAbiertos.map(chat => (
-                                <div 
-                                    key={chat} 
-                                    className={`tab ${chatActivo === chat ? "active-tab" : ""}`}
-                                    onClick={() => cambiarChat(chat)}
-                                >
-                                    <div className="avatar">{chat === "Todos" ? "🌐" : "👤"}</div>
-                                    <div className="tab-info">
-                                        <span className="tab-name">{chat === "Todos" ? "Sala General" : chat}</span>
+                            {chatsAbiertos.map(chat => {
+                                const isG = misGrupos.some(g => g.nombre === chat);
+                                return (
+                                    <div 
+                                        key={chat} 
+                                        className={`tab ${chatActivo === chat ? "active-tab" : ""}`}
+                                        onClick={() => cambiarChat(chat)}
+                                    >
+                                        <div className="avatar">
+                                            {chat === "Todos" ? "🌐" : (isG ? "👥" : "👤")}
+                                        </div>
+                                        <div className="tab-info">
+                                            <span className="tab-name">
+                                                {chat === "Todos" ? "Sala General" : chat}
+                                            </span>
+                                            {isG && <span className="tab-status">Grupo</span>}
+                                        </div>
+                                        {noLeidos[chat] > 0 && (
+                                            <div className="unread-badge">{noLeidos[chat]}</div>
+                                        )}
                                     </div>
-                                    {noLeidos[chat] > 0 && (
-                                        <div className="unread-badge">{noLeidos[chat]}</div>
-                                    )}
-                                </div>
-                            ))}
+                                )
+                            })}
                         </div>
                     </>
                 )}
             </aside>
 
-            {/* PANEL DERECHO: CONVERSACIÓN */}
             <main className="chat-window">
                 <header className="chat-header">
-                    Chat con: <strong>{chatActivo === 'Todos' ? 'Sala General' : chatActivo}</strong>
+                    <div className="chat-header-info">
+                        Chat con: <strong>{chatActivo === 'Todos' ? 'Sala General' : chatActivo}</strong>
+                    </div>
+
+                    {isCurrentChatGroup && isCreatorOfCurrentGroup && (
+                        <div className="group-admin-actions">
+                            <button onClick={() => agregarMiembro(chatActivo)} className="btn-group btn-add">➕ Agregar</button>
+                            <button onClick={() => eliminarGrupo(chatActivo)} className="btn-group btn-delete">🗑️ Eliminar</button>
+                        </div>
+                    )}
                 </header>
-                {/* Dibuja las burbujas */}
-                <MessageWindow messages={historiales[chatActivo] || []} />
-                {/* Dibuja la barra de texto */}
-                <TextBar onSend={handleSendMessage} />
+                
+                <MessageWindow 
+                    messages={historiales[chatActivo] || []} 
+                    onReply={setReplyingTo} 
+                />
+                
+                <TextBar 
+                    onSend={handleSendMessage} 
+                    replyingTo={replyingTo}
+                    onCancelReply={() => setReplyingTo(null)}
+                />
             </main>
         </div>
     );

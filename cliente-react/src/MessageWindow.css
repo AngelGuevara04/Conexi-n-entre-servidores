@@ -1,3 +1,4 @@
+/* BLOQUE 1: CONTENEDOR DE LA CONVERSACIÓN */
 .message-window {
   flex: 1;
   padding: 20px 5%;
@@ -5,17 +6,19 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+
+  /* Fondo de los doodles de WhatsApp */
   background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
   background-repeat: repeat;
   background-size: 400px;
 }
 
+/* Aviso cuando no hay mensajes */
 .empty-chat-msg {
   text-align: center;
   margin-top: auto;
   margin-bottom: auto;
 }
-
 .empty-chat-msg span {
   background-color: #ffeecd;
   padding: 8px 15px;
@@ -25,6 +28,29 @@
   box-shadow: 0 1px 1px rgba(0,0,0,0.05);
 }
 
+
+/* BLOQUE 2: ESTRUCTURA DE LOS MENSAJES */
+
+/* NUEVO: Envoltorio para manejar el layout de la Burbuja + Botón Responder */
+.message-wrapper { 
+  display: flex; 
+  align-items: center; /* Centra el botón verticalmente junto a la burbuja */
+  margin-bottom: 5px; 
+  gap: 10px;
+}
+
+/* Si es tu mensaje, empuja a la derecha (flex-end) y voltea el orden (row-reverse) */
+.message-wrapper.me { 
+  justify-content: flex-end; 
+  flex-direction: row-reverse; 
+}
+
+/* Si es de otro, empuja a la izquierda */
+.message-wrapper.other { 
+  justify-content: flex-start; 
+}
+
+/* La burbuja visual (el globo) de texto */
 .message {
   padding: 8px 10px 4px 10px; 
   border-radius: 8px;
@@ -41,17 +67,61 @@
 .me {
   background-color: #d9fdd3;
   color: #111b21;
-  align-self: flex-end;
-  border-top-right-radius: 0;
+  border-top-right-radius: 0; /* Simula la "colita" de la burbuja */
 }
 
 .other {
   background-color: #ffffff;
   color: #111b21;
-  align-self: flex-start;
   border-top-left-radius: 0;
 }
 
+
+/* BLOQUE 3: RESPUESTAS Y CITAS */
+
+/* El botón transparente de la flecha que flota al lado del mensaje */
+.reply-action-btn { 
+  opacity: 0; /* Es invisible por defecto para no contaminar visualmente */
+  background: none; 
+  border: none; 
+  cursor: pointer; 
+  font-size: 1.2rem; 
+  transition: opacity 0.2s; 
+  padding: 0 5px;
+}
+
+/* Solo se muestra cuando le pasas el mouse por encima a toda la fila */
+.message-wrapper:hover .reply-action-btn { 
+  opacity: 1; 
+}
+
+/* La cajita que se dibuja DENTRO del mensaje cuando respondiste a alguien */
+.quoted-message {
+  background-color: rgba(0, 0, 0, 0.05); /* Fondo oscuro semitransparente */
+  border-left: 4px solid #00a884; /* Línea de decoración lateral verde */
+  padding: 5px 10px; 
+  border-radius: 4px; 
+  margin-bottom: 5px; 
+  font-size: 0.9rem;
+}
+
+.quoted-author { 
+  font-weight: bold; 
+  color: #00a884; 
+  font-size: 0.8rem; 
+  display: block;
+}
+
+.quoted-text { 
+  margin: 0; 
+  color: #555; 
+  white-space: nowrap; 
+  overflow: hidden; 
+  text-overflow: ellipsis; /* Si el mensaje original era eterno, lo corta con "..." */
+}
+
+
+/* BLOQUE 4: TEXTOS INTERNOS Y METADATOS */
 .author {
   font-size: 0.75rem;
   color: #00a884; 
@@ -65,11 +135,12 @@
   word-break: break-word; 
 }
 
+/* Fila pequeña inferior donde va la hora y los tildes */
 .message-meta {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px; /* Separación entre la hora y el texto de estado */
+  gap: 6px; 
   margin-top: -3px; 
 }
 
@@ -78,26 +149,16 @@
   color: #667781;
 }
 
-/* =========================================
-   NUEVOS ESTILOS PARA EL TEXTO DE ESTADO
-   ========================================= */
 .message-status {
   font-size: 0.65rem;
-  font-style: italic; /* Cursiva para distinguirlo de un mensaje normal */
+  font-style: italic; 
 }
+.message-status.enviado { color: #8696a0; }
+.message-status.recibido { color: #54656f; }
+.message-status.leido { color: #00a884; font-weight: 600; }
 
-/* 1. Recién sale de tu celular hacia el servidor */
-.message-status.enviado {
-  color: #8696a0; 
-}
-
-/* 2. Ya le llegó al celular de la otra persona */
-.message-status.recibido {
-  color: #54656f; /* Un gris un poco más oscuro y sólido */
-}
-
-/* 3. La otra persona abrió tu chat */
-.message-status.leido {
-  color: #00a884; /* Verde pro para hacer match con el botón de enviar */
-  font-weight: 600; /* Lo hacemos un poquito más gordito para que resalte */
+/* botón de responder debe estar siempre visible */
+@media (max-width: 768px) {
+  .reply-action-btn { opacity: 1; }
+  .message { max-width: 80%; } /* burbujas más anchas en pantallas chicas */
 }

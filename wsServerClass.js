@@ -1,56 +1,50 @@
 import { WebSocketServer } from 'ws'
 
 /**
- * CLASE wsServer: Actúa como el controlador principal de la sala de chat.
- * Gestiona las conexiones, el enrutamiento de mensajes y los estados (leído/recibido).
+ * CLASE wsServer: Controlador principal de la sala de chat.
+ * Seguridad reforzada contra inyección de textos largos.
  */
 class wsServer {
     constructor() {
-        // Instancia el servidor WebSocket en el puerto 8080
         this.wss = new WebSocketServer({ port: 8080 })
         console.log("Servidor WebSocket iniciado en ws://localhost:8080")
 
-        /**
-         * GESTIÓN DE EVENTOS PRINCIPALES
-         * Se dispara cuando un nuevo cliente establece el handshake TCP/WS.
-         */
+        // Memoria centralizada de grupos
+        this.grupos = {}; 
+
         this.wss.on('connection', (ws) => {
-            // Inmediatamente pedimos al cliente que se identifique
             this.MSG(ws, "IDENTIFICATE") 
 
-            // EVENTO 'message': Escucha los paquetes de datos que envía este cliente
             ws.on('message', (datos) => {
                 datos = this.jsonAJS(datos) 
                 if(datos) {
                     const {mensaje, data} = datos
-                    // Lógica de Enrutamiento Dinámico: Si la clase tiene un método con el nombre 
-                    // del "mensaje" (ej. CHAT, IDENTIFICACION), lo ejecuta dinámicamente.
                     if(this[mensaje] && typeof this[mensaje] == "function")
                         this[mensaje](ws, data) 
                 }
             })
 
-            // EVENTO 'close': Limpieza cuando el cliente cierra la pestaña o pierde red
             ws.on('close', () => {
                 if (ws.data) {
                     console.log(`${ws.data} desconectado`)
                 }
-                // Avisamos a todos los demás que la lista de usuarios ha cambiado
                 this.actualizarTodos()
             })
         })
     }
 
     /**
-     * MÉTODOS DE NEGOCIO (Controladores de Eventos Específicos)
+     * BLOQUE 1: IDENTIFICACIÓN Y CONEXIÓN
      */
-
-    // Valida y registra el nombre de un nuevo usuario
     IDENTIFICACION(ws, data) {
+        if (typeof data !== 'string') return;
         const nombreLimpio = data.trim();
+
+        if (nombreLimpio.length > 20) {
+            return this.MSG(ws, "ERROR", "Tu nombre es demasiado largo (máximo 20 caracteres).");
+        }
+
         let nombreOcupado = false;
-        
-        // Verifica que el nombre no exista ya en la memoria del servidor
         for (const cliente of this.wss.clients) {
             if (cliente.data && cliente.data.toLowerCase() === nombreLimpio.toLowerCase()) {
                 nombreOcupado = true;
@@ -61,18 +55,24 @@ class wsServer {
         if (nombreOcupado) {
             this.MSG(ws, "ERROR", "Ese nombre ya está en uso. Por favor, elige otro.");
         } else {
-            ws.data = nombreLimpio; // Guarda el nombre directamente en el objeto del socket
+            ws.data = nombreLimpio; 
             console.log(`${ws.data} se ha conectado correctamente.`);
             this.MSG(ws, "IDENTIFICACION_EXITOSA");
             this.actualizarTodos();
+
+            const gruposDelUsuario = [];
+            for (const [nombre, info] of Object.entries(this.grupos)) {
+                if (info.miembros.includes(nombreLimpio)) {
+                    gruposDelUsuario.push({ nombre, creador: info.creador });
+                }
+            }
+            this.MSG(ws, "MIS_GRUPOS", gruposDelUsuario);
         }
     }
 
-    // Recopila y envía la lista de usuarios activos a un cliente específico
     CONECTADOS(ws, data) {
         const lista = []
         for (const cliente of this.wss.clients) {
-            // Excluimos al propio usuario que lo solicita y sockets sin identificar
             if(ws.data != cliente.data && cliente.data) {
                 lista.push(cliente.data)
             }
@@ -80,80 +80,130 @@ class wsServer {
         this.MSG(ws, "CONECTADOS", lista)
     }
 
-    // Enrutador principal de mensajes de texto
+    /**
+     * BLOQUE 2: GESTIÓN DE GRUPOS
+     */
+    
+    CREAR_GRUPO(ws, data) {
+        const nombreGrupo = typeof data === 'string' ? data.trim() : "";
+        
+        // Evita inyección de nombres gigantes en la RAM del servidor
+        if (nombreGrupo.length > 20) {
+            return this.MSG(ws, "ERROR", "El nombre del grupo no puede superar los 20 caracteres.");
+        }
+
+        if (!nombreGrupo || this.grupos[nombreGrupo] || nombreGrupo === "Todos") {
+            return this.MSG(ws, "ERROR", "Nombre de grupo inválido o ya existe.");
+        }
+
+        this.grupos[nombreGrupo] = { creador: ws.data, miembros: [ws.data] };
+        this.MSG(ws, "GRUPO_CREADO", { nombre: nombreGrupo, creador: ws.data });
+        console.log(`Grupo '${nombreGrupo}' creado por ${ws.data}`);
+    }
+
+    AGREGAR_A_GRUPO(ws, data) {
+        if (!data || typeof data !== 'object') return;
+        const { nombreGrupo, nuevoMiembro } = data;
+        
+        const miembroLimpio = typeof nuevoMiembro === 'string' ? nuevoMiembro.trim() : "";
+
+        // Evita agregar cadenas gigantes como si fueran usuarios
+        if (miembroLimpio.length > 20) {
+            return this.MSG(ws, "ERROR", "El nombre del usuario no es válido (muy largo).");
+        }
+
+        const grupo = this.grupos[nombreGrupo];
+
+        if (!grupo || grupo.creador !== ws.data) return;
+        
+        if (grupo.miembros.includes(miembroLimpio)) {
+            return this.MSG(ws, "ERROR", "El usuario ya está en el grupo");
+        }
+
+        grupo.miembros.push(miembroLimpio);
+        
+        const socket = this.socketId(miembroLimpio);
+        if (socket) {
+            this.MSG(socket, "AGREGADO_A_GRUPO", { nombre: nombreGrupo, creador: grupo.creador });
+        }
+    }
+
+    ELIMINAR_GRUPO(ws, data) {
+        const nombreGrupo = data;
+        const grupo = this.grupos[nombreGrupo];
+
+        if (!grupo || grupo.creador !== ws.data) return;
+
+        for (const miembro of grupo.miembros) {
+            const socket = this.socketId(miembro);
+            if (socket) this.MSG(socket, "GRUPO_ELIMINADO", nombreGrupo);
+        }
+        
+        delete this.grupos[nombreGrupo];
+        console.log(`Grupo '${nombreGrupo}' eliminado.`);
+    }
+
+    /**
+     * BLOQUE 3: ENRUTAMIENTO DE MENSAJES (TX/RX)
+     */
     CHAT(ws, data) {
         if(data) {
             const emisor = ws.data,
-            {receptor, mensaje, id, hora} = data
+            {receptor, mensaje, id, hora, replyTo, isGroup, nombreGrupo} = data
 
-            // Itera sobre el array de receptores y envía el mensaje individualmente
-            for (const destinatario of receptor) {
-                const socket = this.socketId(destinatario)
-                if(socket)
-                    this.MSG(socket, "CHAT", {emisor, mensaje, id, hora})
+            if (typeof mensaje !== 'string' || mensaje.length > 300) return; 
+
+            if (isGroup && this.grupos[nombreGrupo]) {
+                const miembros = this.grupos[nombreGrupo].miembros;
+                for (const dest of miembros) {
+                    if (dest !== emisor) {
+                        const socket = this.socketId(dest);
+                        if (socket) {
+                            this.MSG(socket, "CHAT", {emisor, mensaje, id, hora, replyTo, nombreGrupo});
+                        }
+                    }
+                }
+            } else {
+                for (const destinatario of receptor) {
+                    const socket = this.socketId(destinatario)
+                    if(socket)
+                        this.MSG(socket, "CHAT", {emisor, mensaje, id, hora, replyTo})
+                }
             }
         }
     }
 
-    // NOTIFICACIÓN: El celular destino confirma que el mensaje llegó a su dispositivo
     MENSAJE_RECIBIDO(ws, data) {
         const socket = this.socketId(data.autorOriginal);
-        if (socket) {
-            this.MSG(socket, "CONFIRMACION_RECEPCION", { 
-                idMensaje: data.idMensaje, 
-                receptor: ws.data 
-            });
-        }
+        if (socket) this.MSG(socket, "CONFIRMACION_RECEPCION", { idMensaje: data.idMensaje, receptor: ws.data });
     }
 
-    // NOTIFICACIÓN: El usuario destino abrió la conversación
     MENSAJE_LEIDO(ws, data) {
         const socket = this.socketId(data.autorOriginal);
-        if (socket) {
-            this.MSG(socket, "CONFIRMACION_LECTURA", { 
-                idMensaje: data.idMensaje, 
-                lector: ws.data 
-            });
-        }
+        if (socket) this.MSG(socket, "CONFIRMACION_LECTURA", { idMensaje: data.idMensaje, lector: ws.data });
     }
 
     /**
      * MÉTODOS DE UTILIDAD
      */
-
-    // Fuerza a todos los clientes a actualizar su lista de contactos
     actualizarTodos() {
         for (const cliente of this.wss.clients) {
-            if (cliente.readyState === 1 && cliente.data) {
-                this.CONECTADOS(cliente)
-            }
+            if (cliente.readyState === 1 && cliente.data) this.CONECTADOS(cliente)
         }
     }
 
-    // Busca un socket específico usando el nombre del usuario
     socketId(id) {
         for (const cliente of this.wss.clients)
             if(cliente.data == id) return cliente
         return false
     }
 
-    // Construye y envía un paquete JSON validando que el socket esté abierto
     MSG(ws, mensaje, data) {
-        const msg = data !== undefined ?
-            this.JSAJson({mensaje, data}) : this.JSAJson({mensaje})
-        // readyState === 1 significa que la conexión WS está OPEN
-        if(msg && ws.readyState === 1) {
-            ws.send(msg)
-        }
+        const msg = data !== undefined ? this.JSAJson({mensaje, data}) : this.JSAJson({mensaje})
+        if(msg && ws.readyState === 1) ws.send(msg)
     }
 
-    // Funciones seguras de parseo para evitar caídas del servidor por formato inválido
-    jsonAJS(json) {
-        try { return JSON.parse(json) } catch { return false }
-    }
-
-    JSAJson(js) {
-        try { return JSON.stringify(js) } catch { return false }
-    }
+    jsonAJS(json) { try { return JSON.parse(json) } catch { return false } }
+    JSAJson(js) { try { return JSON.stringify(js) } catch { return false } }
 }
 new wsServer()
