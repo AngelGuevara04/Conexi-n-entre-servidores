@@ -1,14 +1,10 @@
-/**
- * GESTIÓN DE LA CONEXIÓN WEBSOCKET (Patrón Singleton)
- * Mantiene una única conexión persistente para toda la aplicación React.
- */
 const url = `ws://${window.location.hostname}:8080`;
 let ws;
 
 export const connect = (onMessageReceived, onDisconnect) => {
     ws = new WebSocket(url);
 
-    // EVENTO 'onmessage': Intercepta la trama entrante, la decodifica de JSON a JS 
+    // 'onmessage': Intercepta la trama entrante, la decodifica de JSON a JS 
     // y la pasa a la capa de interfaz gráfica (React)
     ws.onmessage = (event) => {
         try {

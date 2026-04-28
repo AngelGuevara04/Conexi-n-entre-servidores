@@ -30,14 +30,14 @@ const MessageWindow = ({ messages, onReply }) => {
                     // message-wrapper agrupa la burbuja + el botón de responder
                     <div key={msg.id || idx} className={`message-wrapper ${msg.tipo}`}>
                         
-                        {/* La burbuja visual del mensaje (Verde o Blanca) */}
+                        {/* La burbuja visual del mensaje */}
                         <div className={`message ${msg.tipo}`}>
                             
                             {/* Renderizado Condicional: Solo mostramos autor en mensajes ajenos */}
                             {msg.tipo === 'other' && <span className="author">{msg.autor}</span>}
                             
                             {/*
-                                BLOQUE CITA: Dibuja la cajita si el mensaje responde a alguien
+                                Dibuja la cajita si el mensaje responde a alguien
                                 Verifica si el objeto del mensaje tiene la propiedad 'replyTo'
                                 */}
                             {msg.replyTo && (
@@ -77,7 +77,7 @@ const MessageWindow = ({ messages, onReply }) => {
                     </div>
                 ))
             )}
-            {/* Elemento ancla invisible usado por el useEffect para forzar el scroll inferior */}
+            {/* ancla invisible para forzar el scroll inferior */}
             <div ref={endOfMessagesRef} />
         </div>
     );
