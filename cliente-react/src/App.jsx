@@ -2,7 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { connect, send } from './websocket';
 import MessageWindow from './MessageWindow';
 import TextBar from './TextBar';
+import { chatBD } from './chatDB.js'; 
 import './App.css'; 
+
+const miDB = new chatBD();
+window.miDB = miDB; 
 
 function App() {
     const [identificado, setIdentificado] = useState(false);
@@ -203,10 +207,9 @@ function App() {
         return (
             <div className="login-container">
                 <div className="card">
-                    <h2>Chat Pro</h2>
-                    <p>Ingresa tu nombre para comenzar</p>
-                    <input type="text" value={nombre} onChange={e => setNombre(e.target.value)} onKeyPress={e => e.key === 'Enter' && iniciarConexion()} placeholder="Ej: Angel04" />
-                    <button onClick={iniciarConexion}>Entrar al Chat</button>
+                    <h2>Chat Hub</h2>
+                    <input type="text" value={nombre} onChange={e => setNombre(e.target.value)} onKeyPress={e => e.key === 'Enter' && iniciarConexion()} placeholder="Ingresa tu usuario" />
+                    <button onClick={iniciarConexion}>Chatear</button>
                 </div>
             </div>
         );
