@@ -5,13 +5,13 @@ export class chatBD {
 	constructor() {
 		// Guardaremos la conexión aquí para usarla en todos los métodos
 		this.db = null
-	}
+	}      
 
 	/**
 	 * INIT: Configura y abre la conexión.
 	 * Es fundamental porque IndexedDB es una base de datos asíncrona.
 	 */
-	async init() {
+	async init() {                                                                                                                               
 		return new Promise((resolve, reject) => {
 			// Abrimos la DB. El '1' es la versión inicial.
 			const request = indexedDB.open(DB_NAME, 1)
@@ -42,7 +42,7 @@ export class chatBD {
 	/**
 	 * CREATE: Guarda un nuevo objeto.
 	 */
-	async add(nombreGrupo) {
+	async add(nombreGrupo, miembros) {
 		try {
 			// Creamos una transacción de 'readwrite' (lectura y escritura).
 			const tx = this.db.transaction(STORE_NAME, 'readwrite')
@@ -50,7 +50,7 @@ export class chatBD {
 			
 			return new Promise((resolve, reject) => {
 				// .add() inserta el objeto. El ID se genera automáticamente.
-				const request = store.add({ nombre: nombreGrupo })
+				const request = store.add({ nombre: nombreGrupo, miembros: miembros })
 				
 				request.onsuccess = () => resolve(request.result) // Retorna el nuevo ID.
 				request.onerror = () => reject("No se pudo añadir el grupo")

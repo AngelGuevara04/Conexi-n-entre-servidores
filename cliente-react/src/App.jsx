@@ -2,11 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { connect, send } from './websocket';
 import MessageWindow from './MessageWindow';
 import TextBar from './TextBar';
-import { chatBD } from './chatDB.js'; 
+import { chatBD } from './chatDB'; // Importar la clase de la base de datos
 import './App.css'; 
 
-const miDB = new chatBD();
-window.miDB = miDB; 
+// Crear una instancia de la base de datos
+const db = new chatBD();
 
 function App() {
     const [identificado, setIdentificado] = useState(false);
@@ -19,14 +19,39 @@ function App() {
     const [historiales, setHistoriales] = useState({ Todos: [] });
     const [noLeidos, setNoLeidos] = useState({});
     
-    const chatActivoRef = useRef(chatActivo);
+    // Estado para manejar los grupos de la base de datos
+    const [gruposDB, setGruposDB] = useState([]);
     
-    // Mantiene la referencia del chat actual actualizada
+    const chatActivoRef = useRef(chatActivo);
+
     useEffect(() => {
         chatActivoRef.current = chatActivo;
     }, [chatActivo]);
 
-    // Filtra la lista de contactos al buscar
+    // Inicializar la base de datos al cargar la pagina
+    useEffect(() => {
+        const prepararDB = async () => {
+            await db.init();
+            actualizarListaGrupos();
+        };
+        prepararDB();
+    }, []);
+
+    // Consultar grupos de la DB y actualizar el estado
+    const actualizarListaGrupos = async () => {
+        const grupos = await db.getAll();
+        setGruposDB(grupos);
+    };
+
+    // Funcion para crear grupo y guardarlo en la DB
+    const crearNuevoGrupo = async () => {
+        const nombreG = prompt("Nombre del grupo:");
+        if (nombreG) {
+            await db.add(nombreG);
+            actualizarListaGrupos();
+        }
+    };
+
     const usuariosFiltrados = usuarios.filter(u => 
         u.toLowerCase().includes(busqueda.toLowerCase())
     );
@@ -36,23 +61,20 @@ function App() {
 
         connect(
             (incoming) => {
-                // Registro inicial de usuario
                 if (incoming.mensaje === "IDENTIFICATE") {
                     send("IDENTIFICACION", nombre);
-                    setIdentificado(true); // Entrar directo a la interfaz de chat
+                    setIdentificado(true); 
                     setTimeout(() => send("CONECTADOS"), 500); 
                 }
                 
                 if (incoming.mensaje === "ERROR") alert(incoming.data); 
                 if (incoming.mensaje === "CONECTADOS" && incoming.data) setUsuarios(incoming.data);
                 
-                // Procesar la llegada de un nuevo mensaje o estado
                 if (incoming.mensaje === "CHAT" && incoming.data) {
                     const emisor = incoming.data.emisor;
                     const textoCrudo = incoming.data.mensaje;
                     let dataOculta;
 
-                    // Desempacar datos extra del mensaje
                     try {
                         dataOculta = JSON.parse(textoCrudo);
                     } catch (e) {
@@ -64,11 +86,9 @@ function App() {
                         };
                     }
 
-                    // Acciones dependiendo del tipo de paquete recibido
                     if (dataOculta.tipo === "NUEVO_MENSAJE") {
                         gestionarMensajeEntrante(emisor, dataOculta.texto, dataOculta.id, dataOculta.hora);
                         
-                        // Enviar confirmación de mensaje entregado al otro usuario
                         if (emisor !== "Todos") {
                             const reciboEntregado = JSON.stringify({ tipo: "CONFIRMACION_RECEPCION", idMensaje: dataOculta.id });
                             send("CHAT", { receptor: [emisor], mensaje: reciboEntregado });
@@ -85,11 +105,9 @@ function App() {
             () => { alert("Conexión perdida con el servidor."); window.location.reload(); }
         );
 
-        // Actualizar la lista de usuarios cada 3 segundos
         setInterval(() => send("CONECTADOS"), 3000);
     };
 
-    // Cambia el estado del mensaje y evita que uno leído regrese a entregado
     const actualizarEstadoMensaje = (sala, idMensaje, nuevoEstado) => {
         setHistoriales(prev => {
             if (!prev[sala]) return prev;
@@ -110,7 +128,6 @@ function App() {
         let sala = emisor;
         let limpio = texto;
 
-        // Limpiar los prefijos que manda el servidor
         if (texto.startsWith("[GLOBAL]")) {
             sala = "Todos";
             limpio = texto.replace("[GLOBAL]", "");
@@ -118,7 +135,6 @@ function App() {
             limpio = texto.replace("[PRIVADO]", "");
         }
 
-        // Abrir una pestaña nueva si el chat no existía
         setChatsAbiertos(prev => {
             if (!prev.includes(sala)) return [sala, ...prev];
             return prev;
@@ -127,7 +143,6 @@ function App() {
         const nuevoMensaje = { id: idMensaje, autor: emisor, texto: limpio, tipo: 'other', hora: hora, reportadoComoLeido: false };
         setHistoriales(prev => ({ ...prev, [sala]: [...(prev[sala] || []), nuevoMensaje] }));
 
-        // Aumentar contador si no estamos en el chat, o marcar como leído si sí estamos
         if (sala !== chatActivoRef.current) {
             setNoLeidos(prev => ({ ...prev, [sala]: (prev[sala] || 0) + 1 }));
         } 
@@ -152,7 +167,6 @@ function App() {
         const idUnico = Date.now().toString() + Math.floor(Math.random() * 1000);
         const horaActual = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-        // Empaquetar mensaje con su hora y ID
         const payloadOculto = JSON.stringify({
             tipo: "NUEVO_MENSAJE",
             texto: prefijo + texto,
@@ -162,7 +176,6 @@ function App() {
 
         send("CHAT", { receptor: receptores, mensaje: payloadOculto });
 
-        // Guardar mensaje propio en el historial
         const miMensaje = { id: idUnico, autor: "Tú", texto: texto, tipo: 'me', estado: 'enviado', hora: horaActual };
         setHistoriales(prev => ({ ...prev, [chatActivo]: [...(prev[chatActivo] || []), miMensaje] }));
     };
@@ -175,7 +188,6 @@ function App() {
             const chatHistory = prev[chat] || [];
             let huboCambios = false;
             
-            // Al abrir la pestaña, enviamos confirmación de lectura de mensajes pendientes
             const updatedHistory = chatHistory.map(msg => {
                 if (msg.tipo === 'other' && !msg.reportadoComoLeido) {
                     const reciboLeido = JSON.stringify({ tipo: "CONFIRMACION_LECTURA", idMensaje: msg.id });
@@ -202,7 +214,6 @@ function App() {
         setBusqueda("");
     };
 
-    // Pantalla de inicio de sesión
     if (!identificado) {
         return (
             <div className="login-container">
@@ -215,7 +226,6 @@ function App() {
         );
     }
 
-    // Interfaz principal del chat
     return (
         <div className="app-container">
             <aside className="sidebar">
@@ -247,9 +257,24 @@ function App() {
                     <>
                         <div className="sidebar-header">
                             <h3>Mis Chats</h3>
-                            <button className="new-chat-btn" onClick={() => setVistaContactos(true)}>➕</button>
+                            <div>
+                                <button className="new-chat-btn" onClick={crearNuevoGrupo} style={{marginRight: '5px'}}>📁</button>
+                                <button className="new-chat-btn" onClick={() => setVistaContactos(true)}>➕</button>
+                            </div>
                         </div>
+
+                        {/* Mostrar grupos guardados en la DB */}
                         <div className="user-list">
+                            <p style={{padding: '5px 20px', fontSize: '0.7rem', color: 'gray'}}>GRUPOS EN DB</p>
+                            {gruposDB.map(g => (
+                                <div key={g.id} className="tab">
+                                    <div className="avatar">👥</div>
+                                    <div className="tab-info">
+                                        <span className="tab-name">{g.nombre}</span>
+                                    </div>
+                                </div>
+                            ))}
+                            <hr style={{opacity: 0.1}}/>
                             {chatsAbiertos.map(chat => (
                                 <div key={chat} className={`tab ${chatActivo === chat ? "active-tab" : ""}`} onClick={() => cambiarChat(chat)}>
                                     <div className="avatar">{chat === "Todos" ? "🌐" : "👤"}</div>
