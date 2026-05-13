@@ -1,5 +1,5 @@
 git add .
 
-git commit -m "actualización DB"
+git commit -m "actualización no sé"
 
 git push
