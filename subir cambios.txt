@@ -1,5 +1,5 @@
 git add .
 
-git commit -m "actualización grupos completa"
+git commit -m "actualización mensajes permanentes"
 
 git push

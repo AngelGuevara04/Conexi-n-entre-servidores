@@ -5,6 +5,9 @@ class wsServer {
 		this.wss = new WebSocketServer({ port: 8080 })
 		console.log("Servidor WebSocket iniciado en ws://localhost:8080")
 
+		// NUEVO: Memoria temporal para guardar mensajes de usuarios desconectados
+		this.mensajesPendientes = {}
+
 		// Un cliente se conecta
 		this.wss.on('connection', (ws) => {
 			this.MSG(ws, "IDENTIFICATE") // Solicito identificación
@@ -16,41 +19,49 @@ class wsServer {
 
 					// Ejecuto dinámicamente al método gestor del mensaje
 					if(this[mensaje] && typeof this[mensaje] == "function")
-						this[mensaje](ws, data) // Los gestores de mensajes deben llevar la misma firma
+						this[mensaje](ws, data) 
 				}
 			})
 
 			// Un cliente se desconecta
 			ws.on('close', () => {
 				console.log(`${ws.data} desconectado`)
-				// Siempre que se desconecta un cliente, informo a los otros clientes
 				this.CONECTADOS(ws)
 			})
 
-			// Siempre que se conecte un nuevo cliente, informo a los otros
 			this.CONECTADOS(ws)
 		})
 	}
 
 	//
 	// Gestores de mensajes
-	// NOTA: Todos los métodos gestores de mensajes llevan la misma firma
 	//
 
 	IDENTIFICACION(ws, data) {
 		ws.data = data
 		console.log(`${ws.data} conectado...`)
+
+		// NUEVO: Cuando el usuario se identifica, revisamos si tiene mensajes en espera
+		if (this.mensajesPendientes[data] && this.mensajesPendientes[data].length > 0) {
+			console.log(`Entregando ${this.mensajesPendientes[data].length} mensajes pendientes a ${data}...`)
+			
+			// Le enviamos cada mensaje guardado
+			for (const msgGuardado of this.mensajesPendientes[data]) {
+				this.MSG(ws, "CHAT", msgGuardado)
+			}
+			
+			// Una vez entregados, vaciamos su bandeja para no repetirlos
+			delete this.mensajesPendientes[data]
+		}
 	}
 
 	CONECTADOS(ws, data) {
-		// Armo el arreglo de clientes para enviar
 		data = []
 		for (const cliente of this.wss.clients)
-			// Enviar el id del propio socket que pregunta es redundante
-			if(ws.data != cliente.data)
+			// Nos aseguramos de no enviar sockets sin nombre aún
+			if(ws.data != cliente.data && cliente.data)
 				data.push(cliente.data)
 
-		// Solo si hay clientes mando el mensaje
 		if(data.length)
 			this.MSG(ws, "CONECTADOS", data)
 	}
@@ -63,8 +74,17 @@ class wsServer {
 			for (const destinatario of receptor) {
 				const socket = this.socketId(destinatario)
 
-				if(socket)
+				if(socket) {
+					// Si está conectado, se lo mando en tiempo real
 					this.MSG(socket, "CHAT", {emisor, mensaje})
+				} else {
+					// NUEVO: Si está desconectado, lo guardo en su cola de pendientes
+					if (!this.mensajesPendientes[destinatario]) {
+						this.mensajesPendientes[destinatario] = []
+					}
+					this.mensajesPendientes[destinatario].push({ emisor, mensaje })
+					console.log(`Mensaje encolado para ${destinatario} (está offline)`)
+				}
 			}
 		}
 	}
@@ -74,34 +94,29 @@ class wsServer {
 	//
 
 	socketId(id) {
-		// Recorro la lista de clientes para localizar al receptor
 		for (const cliente of this.wss.clients)
 			if(cliente.data == id) return cliente
 		return false
 	}
 
-	// Envía un mensaje al socket indicado
 	MSG(ws, mensaje, data) {
-		// Solo voy a enviar data, si hay data
 		const msg = data != {} && data != undefined && data != null ?
 			this.JSAJson({mensaje, data}) : this.JSAJson({mensaje})
 		
 		if(msg) {
 			ws.send(msg)
-			// console.log(`Mensaje enviado: ${msg}`)
 		}
 	}
 
-	// Conversión a Javascript segura
 	jsonAJS(json) {
 		try { return JSON.parse(json) }
 		catch { return false }
 	}
 
-	// Conversión a JSON segura
 	JSAJson(js) {
 		try { return JSON.stringify(js) }
 		catch { return false }
 	}
 }
+
 new wsServer()

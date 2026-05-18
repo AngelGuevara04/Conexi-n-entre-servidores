@@ -24,29 +24,13 @@ function App() {
     const [noLeidos, setNoLeidos] = useState({});
     
     const [misGrupos, setMisGrupos] = useState([]); 
+    const [mensajeAResponder, setMensajeAResponder] = useState(null);
     
     const chatActivoRef = useRef(chatActivo);
 
     useEffect(() => {
         chatActivoRef.current = chatActivo;
     }, [chatActivo]);
-
-    useEffect(() => {
-        if (identificado) {
-            actualizarListaGrupos();
-        }
-    }, [identificado, nombre]);
-
-    useEffect(() => {
-        const prepararDB = async () => {
-            try {
-                await db.init();
-            } catch (err) {
-                console.error("Error al inicializar IndexedDB:", err);
-            }
-        };
-        prepararDB();
-    }, []);
 
     const actualizarListaGrupos = async () => {
         if (!nombre) return;
@@ -60,7 +44,41 @@ function App() {
             );
             setMisGrupos(gruposPermitidos);
         } catch (error) {
-            console.error("Error al leer los grupos de la BD:", error);
+            console.error("Error al leer grupos:", error);
+        }
+    };
+
+    const cargarHistorialesDesdeBD = async () => {
+        try {
+            const todosLosMensajes = await db.getAllMensajes();
+            const nuevoHistoriales = { Todos: [] };
+            const salasChatPrivado = [];
+
+            todosLosMensajes.forEach(msg => {
+                const sala = msg.sala;
+                if (!nuevoHistoriales[sala]) {
+                    nuevoHistoriales[sala] = [];
+                }
+                nuevoHistoriales[sala].push(msg);
+
+                if (!sala.startsWith("GRUPO_") && sala !== "Todos" && !salasChatPrivado.includes(sala)) {
+                    salasChatPrivado.push(sala);
+                }
+            });
+
+            if (salasChatPrivado.length > 0) {
+                setChatsAbiertos(prev => {
+                    const combinados = [...prev];
+                    salasChatPrivado.forEach(s => {
+                        if (!combinados.includes(s)) combinados.push(s);
+                    });
+                    return combinados;
+                });
+            }
+
+            setHistoriales(nuevoHistoriales);
+        } catch (err) {
+            console.error("Error al restaurar historial:", err);
         }
     };
 
@@ -78,14 +96,11 @@ function App() {
             const todosLosMiembros = [nombre, ...miembrosSeleccionados];
             
             try {
-                // 1. Guardar localmente
                 await db.add(idGlobalGrupo, nombreGrupoNuevo, todosLosMiembros);
                 
-                // 2. Forzar actualización inmediata en la UI del creador
                 const nuevoGrupoObj = { id: idGlobalGrupo, nombre: nombreGrupoNuevo, miembros: todosLosMiembros };
                 setMisGrupos(prev => [...prev, nuevoGrupoObj]);
 
-                // 3. Crear mensaje automático de Sistema para el creador
                 const msgCreador = {
                     id: `SYS_${Date.now()}`,
                     autor: "Sistema",
@@ -94,9 +109,10 @@ function App() {
                     estado: 'leido',
                     hora: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                 };
+                
+                await db.addMensaje({ ...msgCreador, sala: idGlobalGrupo });
                 setHistoriales(prev => ({ ...prev, [idGlobalGrupo]: [msgCreador] }));
 
-                // 4. Notificar vía WebSocket a los seleccionados
                 const payloadSincronizacion = JSON.stringify({
                     tipo: "NUEVO_GRUPO",
                     idGrupo: idGlobalGrupo,
@@ -104,10 +120,8 @@ function App() {
                     miembros: todosLosMiembros
                 });
                 
-                // SOLUCIÓN DEFINITIVA: Enviamos el array completo tal y como lo espera tu servidor Node.js
                 send("CHAT", { receptor: miembrosSeleccionados, mensaje: payloadSincronizacion });
                 
-                // Limpiar y abrir el grupo
                 setVistaCrearGrupo(false);
                 setNombreGrupoNuevo("");
                 setMiembrosSeleccionados([]);
@@ -118,12 +132,75 @@ function App() {
         }
     };
 
+    // --- NUEVAS FUNCIONES PARA EDITAR Y ELIMINAR GRUPOS ---
+
+    const renombrarGrupoActivo = async () => {
+        const grupo = misGrupos.find(g => g.id === chatActivo);
+        if (!grupo) return;
+
+        const nuevoNombre = prompt("Ingresa el nuevo nombre para el grupo:", grupo.nombre);
+        if (nuevoNombre && nuevoNombre.trim() !== "" && nuevoNombre !== grupo.nombre) {
+            const nombreLimpio = nuevoNombre.trim();
+            
+            // 1. Actualizamos en BD local
+            await db.update(grupo.id, nombreLimpio);
+            
+            // 2. Actualizamos la Interfaz Gráfica
+            setMisGrupos(prev => prev.map(g => g.id === grupo.id ? { ...g, nombre: nombreLimpio } : g));
+
+            // 3. Avisamos a los demás miembros
+            const receptores = grupo.miembros.filter(m => m !== nombre);
+            if (receptores.length > 0) {
+                const payload = JSON.stringify({
+                    tipo: "EDITAR_GRUPO",
+                    idGrupo: grupo.id,
+                    nuevoNombre: nombreLimpio
+                });
+                send("CHAT", { receptor: receptores, mensaje: payload });
+            }
+        }
+    };
+
+    const eliminarGrupoActivo = async () => {
+        const grupo = misGrupos.find(g => g.id === chatActivo);
+        if (!grupo) return;
+
+        if (window.confirm(`¿Estás seguro de que deseas eliminar el grupo "${grupo.nombre}" para todos los miembros?`)) {
+            // 1. Borramos de la BD local
+            await db.delete(grupo.id);
+            
+            // 2. Actualizamos la interfaz (lo quitamos de la lista y volvemos al chat general)
+            setMisGrupos(prev => prev.filter(g => g.id !== grupo.id));
+            cambiarChat("Todos");
+
+            // 3. Avisamos a los demás miembros para que se les borre automáticamente
+            const receptores = grupo.miembros.filter(m => m !== nombre);
+            if (receptores.length > 0) {
+                const payload = JSON.stringify({
+                    tipo: "ELIMINAR_GRUPO",
+                    idGrupo: grupo.id
+                });
+                send("CHAT", { receptor: receptores, mensaje: payload });
+            }
+        }
+    };
+
     const usuariosFiltrados = usuarios.filter(u => 
         u && u.toLowerCase().includes(busqueda.toLowerCase())
     );
 
-    const iniciarConexion = () => {
+    const iniciarConexion = async () => {
         if (!nombre.trim()) return alert("Ingresa un nombre");
+
+        try {
+            await db.init(nombre); 
+            await actualizarListaGrupos();
+            await cargarHistorialesDesdeBD();
+            setIdentificado(true); 
+        } catch (error) {
+            console.error(error);
+            return alert("Hubo un error cargando tu entorno local.");
+        }
 
         connect(
             (incoming) => {
@@ -131,7 +208,6 @@ function App() {
 
                 if (incoming.mensaje === "IDENTIFICATE") {
                     send("IDENTIFICACION", nombre);
-                    setIdentificado(true); 
                     setTimeout(() => send("CONECTADOS"), 500); 
                 }
                 
@@ -156,51 +232,40 @@ function App() {
                     }
 
                     if (dataOculta.tipo === "NUEVO_GRUPO") {
-                        const nuevoGrupoObj = {
-                            id: dataOculta.idGrupo,
-                            nombre: dataOculta.nombre,
-                            miembros: dataOculta.miembros
-                        };
+                        const nuevoGrupoObj = { id: dataOculta.idGrupo, nombre: dataOculta.nombre, miembros: dataOculta.miembros };
 
-                        // 1. Actualizamos la vista de grupos al instante
                         setMisGrupos(prev => {
                             if (prev.find(g => g.id === nuevoGrupoObj.id)) return prev;
                             return [...prev, nuevoGrupoObj];
                         });
 
-                        // 2. Guardamos en IndexedDB en segundo plano
-                        db.add(dataOculta.idGrupo, dataOculta.nombre, dataOculta.miembros)
-                          .catch(err => console.error("Error BD:", err));
+                        db.add(dataOculta.idGrupo, dataOculta.nombre, dataOculta.miembros).catch(err => console.error(err));
 
-                        // 3. Generamos el mensaje automático
                         const msgBienvenida = {
-                            id: `SYS_${Date.now()}`,
-                            autor: "Sistema",
-                            texto: `Has sido agregado al grupo "${dataOculta.nombre}" por ${emisor}`,
-                            tipo: 'other', 
-                            hora: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                            reportadoComoLeido: true
+                            id: `SYS_${Date.now()}`, autor: "Sistema", texto: `Has sido agregado al grupo "${dataOculta.nombre}" por ${emisor}`,
+                            tipo: 'other', hora: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), reportadoComoLeido: true
                         };
 
-                        // 4. Agregamos el mensaje e incrementamos la notificación visual
-                        setHistoriales(prev => ({ 
-                            ...prev, 
-                            [dataOculta.idGrupo]: [...(prev[dataOculta.idGrupo] || []), msgBienvenida] 
-                        }));
+                        db.addMensaje({ ...msgBienvenida, sala: dataOculta.idGrupo }).catch(err => console.error(err));
+                        setHistoriales(prev => ({ ...prev, [dataOculta.idGrupo]: [...(prev[dataOculta.idGrupo] || []), msgBienvenida] }));
+                        setNoLeidos(prev => ({ ...prev, [dataOculta.idGrupo]: (prev[dataOculta.idGrupo] || 0) + 1 }));
+                    }
+                    // --- NUEVOS CONTROLADORES PARA SINCRONIZAR EDICIÓN Y ELIMINACIÓN ---
+                    else if (dataOculta.tipo === "EDITAR_GRUPO") {
+                        db.update(dataOculta.idGrupo, dataOculta.nuevoNombre).catch(err => console.error(err));
+                        setMisGrupos(prev => prev.map(g => g.id === dataOculta.idGrupo ? { ...g, nombre: dataOculta.nuevoNombre } : g));
+                    }
+                    else if (dataOculta.tipo === "ELIMINAR_GRUPO") {
+                        db.delete(dataOculta.idGrupo).catch(err => console.error(err));
+                        setMisGrupos(prev => prev.filter(g => g.id !== dataOculta.idGrupo));
                         
-                        setNoLeidos(prev => ({ 
-                            ...prev, 
-                            [dataOculta.idGrupo]: (prev[dataOculta.idGrupo] || 0) + 1 
-                        }));
+                        // Si el usuario tenía abierto justo ese grupo cuando lo borraron, lo sacamos de ahí
+                        if (chatActivoRef.current === dataOculta.idGrupo) {
+                            cambiarChat("Todos");
+                        }
                     }
                     else if (dataOculta.tipo === "NUEVO_MENSAJE") {
-                        gestionarMensajeEntrante(emisor, dataOculta.texto, dataOculta.id, dataOculta.hora, dataOculta.destino);
-                        
-                        const destinoStr = String(dataOculta.destino || '');
-                        if (emisor !== "Todos" && !destinoStr.startsWith("GRUPO_") && emisor !== "Sistema") {
-                            const reciboEntregado = JSON.stringify({ tipo: "CONFIRMACION_RECEPCION", idMensaje: dataOculta.id });
-                            send("CHAT", { receptor: [emisor], mensaje: reciboEntregado });
-                        }
+                        gestionarMensajeEntrante(emisor, dataOculta.texto, dataOculta.id, dataOculta.hora, dataOculta.destino, dataOculta.replyTo);
                     } 
                     else if (dataOculta.tipo === "CONFIRMACION_RECEPCION") {
                         actualizarEstadoMensaje(emisor, dataOculta.idMensaje, 'recibido');
@@ -210,16 +275,15 @@ function App() {
                     }
                 }
             },
-            () => { 
-                alert("Conexión perdida con el servidor."); 
-                window.location.reload(); 
-            }
+            () => { alert("Conexión perdida con el servidor."); window.location.reload(); }
         );
 
         setInterval(() => send("CONECTADOS"), 3000);
     };
 
-    const actualizarEstadoMensaje = (sala, idMensaje, nuevoEstado) => {
+    const actualizarEstadoMensaje = async (sala, idMensaje, nuevoEstado) => {
+        await db.updateEstadoMensaje(idMensaje, nuevoEstado);
+
         setHistoriales(prev => {
             if (!prev[sala]) return prev;
             return {
@@ -235,7 +299,7 @@ function App() {
         });
     };
 
-    const gestionarMensajeEntrante = (emisor, texto, idMensaje, hora, destino) => {
+    const gestionarMensajeEntrante = (emisor, texto, idMensaje, hora, destino, replyTo) => {
         let sala = emisor; 
         let limpio = texto || "";
         const destinoStr = String(destino || '');
@@ -257,23 +321,25 @@ function App() {
             });
         }
 
-        const nuevoMensaje = { id: idUnicoSeguro(idMensaje), autor: emisor, texto: limpio, tipo: 'other', hora: hora, reportadoComoLeido: false };
+        let reportadoComoLeido = false;
+
+        if (sala === chatActivoRef.current && sala !== "Todos" && !sala.startsWith("GRUPO_")) {
+            reportadoComoLeido = true;
+            const reciboLeido = JSON.stringify({ tipo: "CONFIRMACION_LECTURA", idMensaje: idMensaje });
+            send("CHAT", { receptor: [emisor], mensaje: reciboLeido });
+        } else if (sala !== "Todos" && !sala.startsWith("GRUPO_")) {
+            const reciboEntregado = JSON.stringify({ tipo: "CONFIRMACION_RECEPCION", idMensaje: idMensaje });
+            send("CHAT", { receptor: [emisor], mensaje: reciboEntregado });
+        }
+
+        const nuevoMensaje = { id: idUnicoSeguro(idMensaje), autor: emisor, texto: limpio, tipo: 'other', hora: hora, reportadoComoLeido, replyTo };
+        
+        db.addMensaje({ ...nuevoMensaje, sala }).catch(err => console.error(err));
+
         setHistoriales(prev => ({ ...prev, [sala]: [...(prev[sala] || []), nuevoMensaje] }));
 
         if (sala !== chatActivoRef.current) {
             setNoLeidos(prev => ({ ...prev, [sala]: (prev[sala] || 0) + 1 }));
-        } 
-        else if (sala !== "Todos" && !sala.startsWith("GRUPO_")) {
-            const reciboLeido = JSON.stringify({ tipo: "CONFIRMACION_LECTURA", idMensaje: idMensaje });
-            send("CHAT", { receptor: [emisor], mensaje: reciboLeido });
-
-            setHistoriales(prev => ({
-                ...prev,
-                [sala]: prev[sala].map(m => {
-                    if(m.id === idMensaje) return {...m, reportadoComoLeido: true};
-                    return m;
-                })
-            }));
         }
     };
 
@@ -307,17 +373,21 @@ function App() {
             texto: prefijo + texto,
             destino: chatActivoStr, 
             id: idUnico,
-            hora: horaActual
+            hora: horaActual,
+            replyTo: mensajeAResponder 
         });
 
-        // FILTRO Y ENVÍO CORREGIDO PARA TU SERVIDOR NODE
         const receptoresReales = receptores.filter(r => r !== nombre);
         if (receptoresReales.length > 0) {
             send("CHAT", { receptor: receptoresReales, mensaje: payloadOculto });
         }
 
-        const miMensaje = { id: idUnico, autor: "Tú", texto: texto, tipo: 'me', estado: 'enviado', hora: horaActual };
+        const miMensaje = { id: idUnico, autor: "Tú", texto: texto, tipo: 'me', estado: 'enviado', hora: horaActual, replyTo: mensajeAResponder };
+        
+        db.addMensaje({ ...miMensaje, sala: chatActivoStr }).catch(err => console.error(err));
         setHistoriales(prev => ({ ...prev, [chatActivoStr]: [...(prev[chatActivoStr] || []), miMensaje] }));
+        
+        setMensajeAResponder(null);
     };
 
     const cambiarChat = (chatId) => {
@@ -326,23 +396,25 @@ function App() {
         setChatActivo(chatIdStr);
         setNoLeidos(prev => ({ ...prev, [chatIdStr]: 0 }));
 
-        setHistoriales(prev => {
-            const chatHistory = prev[chatIdStr] || [];
-            let huboCambios = false;
-            
-            const updatedHistory = chatHistory.map(msg => {
-                if (msg && msg.tipo === 'other' && !msg.reportadoComoLeido && !chatIdStr.startsWith("GRUPO_") && msg.autor !== "Sistema") {
-                    const reciboLeido = JSON.stringify({ tipo: "CONFIRMACION_LECTURA", idMensaje: msg.id });
-                    send("CHAT", { receptor: [msg.autor], mensaje: reciboLeido });
-                    huboCambios = true;
-                    return { ...msg, reportadoComoLeido: true };
-                }
-                return msg;
-            });
-
-            if (huboCambios) return { ...prev, [chatIdStr]: updatedHistory };
-            return prev;
+        const chatHistory = historiales[chatIdStr] || [];
+        let huboCambios = false;
+        
+        const updatedHistory = chatHistory.map(msg => {
+            if (msg && msg.tipo === 'other' && !msg.reportadoComoLeido && !chatIdStr.startsWith("GRUPO_") && msg.autor !== "Sistema") {
+                const reciboLeido = JSON.stringify({ tipo: "CONFIRMACION_LECTURA", idMensaje: msg.id });
+                send("CHAT", { receptor: [msg.autor], mensaje: reciboLeido });
+                huboCambios = true;
+                
+                const msgActualizado = { ...msg, reportadoComoLeido: true };
+                db.addMensaje({ ...msgActualizado, sala: chatIdStr }).catch(err => console.error(err));
+                return msgActualizado;
+            }
+            return msg;
         });
+
+        if (huboCambios) {
+            setHistoriales(prev => ({ ...prev, [chatIdStr]: updatedHistory }));
+        }
     };
 
     const abrirChat = (usuario) => {
@@ -508,9 +580,33 @@ function App() {
                     <div className="chat-header-info">
                         <strong>{obtenerNombreChatActivo()}</strong>
                     </div>
+                    {/* BOTONES DE EDICIÓN Y ELIMINACIÓN DE GRUPO */}
+                    {chatActivo.startsWith("GRUPO_") && (
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <button 
+                                onClick={renombrarGrupoActivo} 
+                                title="Renombrar Grupo" 
+                                style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem' }}>
+                                ✏️
+                            </button>
+                            <button 
+                                onClick={eliminarGrupoActivo} 
+                                title="Eliminar Grupo" 
+                                style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: 'red' }}>
+                                🗑️
+                            </button>
+                        </div>
+                    )}
                 </header>
-                <MessageWindow messages={historiales[chatActivo] || []} onReply={() => {}} />
-                <TextBar onSend={handleSendMessage} />
+                <MessageWindow 
+                    messages={historiales[chatActivo] || []} 
+                    onReply={(msg) => setMensajeAResponder(msg)} 
+                />
+                <TextBar 
+                    onSend={handleSendMessage} 
+                    replyingTo={mensajeAResponder} 
+                    onCancelReply={() => setMensajeAResponder(null)} 
+                />
             </main>
         </div>
     );
