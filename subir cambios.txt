@@ -1,5 +1,5 @@
 git add .
 
-git commit -m "actualización ni idea"
+git commit -m "actualización grupos completa"
 
 git push

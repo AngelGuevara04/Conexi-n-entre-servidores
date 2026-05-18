@@ -22,7 +22,8 @@ function App() {
     const [chatActivo, setChatActivo] = useState("Todos");
     const [historiales, setHistoriales] = useState({ Todos: [] });
     const [noLeidos, setNoLeidos] = useState({});
-    const [gruposDB, setGruposDB] = useState([]);
+    
+    const [misGrupos, setMisGrupos] = useState([]); 
     
     const chatActivoRef = useRef(chatActivo);
 
@@ -31,16 +32,36 @@ function App() {
     }, [chatActivo]);
 
     useEffect(() => {
-        const prepararDB = async () => {
-            await db.init();
+        if (identificado) {
             actualizarListaGrupos();
+        }
+    }, [identificado, nombre]);
+
+    useEffect(() => {
+        const prepararDB = async () => {
+            try {
+                await db.init();
+            } catch (err) {
+                console.error("Error al inicializar IndexedDB:", err);
+            }
         };
         prepararDB();
     }, []);
 
     const actualizarListaGrupos = async () => {
-        const grupos = await db.getAll();
-        setGruposDB(grupos);
+        if (!nombre) return;
+        try {
+            const todosLosGrupos = await db.getAll();
+            const gruposPermitidos = todosLosGrupos.filter(grupo => 
+                grupo && 
+                grupo.miembros && 
+                Array.isArray(grupo.miembros) && 
+                grupo.miembros.includes(nombre)
+            );
+            setMisGrupos(gruposPermitidos);
+        } catch (error) {
+            console.error("Error al leer los grupos de la BD:", error);
+        }
     };
 
     const toggleMiembro = (usuarioSel) => {
@@ -56,30 +77,49 @@ function App() {
             const idGlobalGrupo = `GRUPO_${Date.now()}`;
             const todosLosMiembros = [nombre, ...miembrosSeleccionados];
             
-            // 1. Guardar en tu base de datos local
-            await db.add(idGlobalGrupo, nombreGrupoNuevo, todosLosMiembros);
-            
-            // 2. Sincronizar: Enviar invitación silenciosa a los integrantes seleccionados
-            const payloadSincronizacion = JSON.stringify({
-                tipo: "NUEVO_GRUPO",
-                idGrupo: idGlobalGrupo,
-                nombre: nombreGrupoNuevo,
-                miembros: todosLosMiembros
-            });
-            send("CHAT", { receptor: miembrosSeleccionados, mensaje: payloadSincronizacion });
-            
-            actualizarListaGrupos();
-            setVistaCrearGrupo(false);
-            setNombreGrupoNuevo("");
-            setMiembrosSeleccionados([]);
-            
-            // 3. Abrir el grupo recién creado
-            abrirGrupo({ id: idGlobalGrupo });
+            try {
+                // 1. Guardar localmente
+                await db.add(idGlobalGrupo, nombreGrupoNuevo, todosLosMiembros);
+                
+                // 2. Forzar actualización inmediata en la UI del creador
+                const nuevoGrupoObj = { id: idGlobalGrupo, nombre: nombreGrupoNuevo, miembros: todosLosMiembros };
+                setMisGrupos(prev => [...prev, nuevoGrupoObj]);
+
+                // 3. Crear mensaje automático de Sistema para el creador
+                const msgCreador = {
+                    id: `SYS_${Date.now()}`,
+                    autor: "Sistema",
+                    texto: `Has creado el grupo "${nombreGrupoNuevo}"`,
+                    tipo: 'me',
+                    estado: 'leido',
+                    hora: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                };
+                setHistoriales(prev => ({ ...prev, [idGlobalGrupo]: [msgCreador] }));
+
+                // 4. Notificar vía WebSocket a los seleccionados
+                const payloadSincronizacion = JSON.stringify({
+                    tipo: "NUEVO_GRUPO",
+                    idGrupo: idGlobalGrupo,
+                    nombre: nombreGrupoNuevo,
+                    miembros: todosLosMiembros
+                });
+                
+                // SOLUCIÓN DEFINITIVA: Enviamos el array completo tal y como lo espera tu servidor Node.js
+                send("CHAT", { receptor: miembrosSeleccionados, mensaje: payloadSincronizacion });
+                
+                // Limpiar y abrir el grupo
+                setVistaCrearGrupo(false);
+                setNombreGrupoNuevo("");
+                setMiembrosSeleccionados([]);
+                cambiarChat(idGlobalGrupo);
+            } catch (err) {
+                console.error("Error al crear el grupo:", err);
+            }
         }
     };
 
     const usuariosFiltrados = usuarios.filter(u => 
-        u.toLowerCase().includes(busqueda.toLowerCase())
+        u && u.toLowerCase().includes(busqueda.toLowerCase())
     );
 
     const iniciarConexion = () => {
@@ -87,6 +127,8 @@ function App() {
 
         connect(
             (incoming) => {
+                if (!incoming) return;
+
                 if (incoming.mensaje === "IDENTIFICATE") {
                     send("IDENTIFICACION", nombre);
                     setIdentificado(true); 
@@ -107,24 +149,55 @@ function App() {
                         dataOculta = { 
                             tipo: "NUEVO_MENSAJE", 
                             texto: textoCrudo, 
-                            destino: "Todos", // Fallback
+                            destino: "Todos",
                             id: Date.now().toString(), 
                             hora: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
                         };
                     }
 
-                    // --- NUEVA LÓGICA DE SINCRONIZACIÓN DE GRUPOS ---
                     if (dataOculta.tipo === "NUEVO_GRUPO") {
-                        // Alguien nos agregó a un grupo. Lo guardamos localmente.
-                        db.add(dataOculta.idGrupo, dataOculta.nombre, dataOculta.miembros).then(() => {
-                            actualizarListaGrupos();
+                        const nuevoGrupoObj = {
+                            id: dataOculta.idGrupo,
+                            nombre: dataOculta.nombre,
+                            miembros: dataOculta.miembros
+                        };
+
+                        // 1. Actualizamos la vista de grupos al instante
+                        setMisGrupos(prev => {
+                            if (prev.find(g => g.id === nuevoGrupoObj.id)) return prev;
+                            return [...prev, nuevoGrupoObj];
                         });
+
+                        // 2. Guardamos en IndexedDB en segundo plano
+                        db.add(dataOculta.idGrupo, dataOculta.nombre, dataOculta.miembros)
+                          .catch(err => console.error("Error BD:", err));
+
+                        // 3. Generamos el mensaje automático
+                        const msgBienvenida = {
+                            id: `SYS_${Date.now()}`,
+                            autor: "Sistema",
+                            texto: `Has sido agregado al grupo "${dataOculta.nombre}" por ${emisor}`,
+                            tipo: 'other', 
+                            hora: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                            reportadoComoLeido: true
+                        };
+
+                        // 4. Agregamos el mensaje e incrementamos la notificación visual
+                        setHistoriales(prev => ({ 
+                            ...prev, 
+                            [dataOculta.idGrupo]: [...(prev[dataOculta.idGrupo] || []), msgBienvenida] 
+                        }));
+                        
+                        setNoLeidos(prev => ({ 
+                            ...prev, 
+                            [dataOculta.idGrupo]: (prev[dataOculta.idGrupo] || 0) + 1 
+                        }));
                     }
                     else if (dataOculta.tipo === "NUEVO_MENSAJE") {
                         gestionarMensajeEntrante(emisor, dataOculta.texto, dataOculta.id, dataOculta.hora, dataOculta.destino);
                         
-                        // Confirmación de recepción básica (solo para privados, evitar tormenta en grupos)
-                        if (emisor !== "Todos" && (!dataOculta.destino || !dataOculta.destino.startsWith("GRUPO_"))) {
+                        const destinoStr = String(dataOculta.destino || '');
+                        if (emisor !== "Todos" && !destinoStr.startsWith("GRUPO_") && emisor !== "Sistema") {
                             const reciboEntregado = JSON.stringify({ tipo: "CONFIRMACION_RECEPCION", idMensaje: dataOculta.id });
                             send("CHAT", { receptor: [emisor], mensaje: reciboEntregado });
                         }
@@ -137,7 +210,10 @@ function App() {
                     }
                 }
             },
-            () => { alert("Conexión perdida con el servidor."); window.location.reload(); }
+            () => { 
+                alert("Conexión perdida con el servidor."); 
+                window.location.reload(); 
+            }
         );
 
         setInterval(() => send("CONECTADOS"), 3000);
@@ -160,22 +236,20 @@ function App() {
     };
 
     const gestionarMensajeEntrante = (emisor, texto, idMensaje, hora, destino) => {
-        let sala = emisor; // Por defecto asumimos chat privado
-        let limpio = texto;
+        let sala = emisor; 
+        let limpio = texto || "";
+        const destinoStr = String(destino || '');
 
-        // Determinar a qué ventana pertenece el mensaje
-        if (destino === "Todos") {
+        if (destinoStr === "Todos") {
             sala = "Todos";
-            limpio = texto.replace("[GLOBAL]", ""); 
-        } else if (destino && destino.startsWith("GRUPO_")) {
-            sala = destino; 
-            // En grupos mostramos quién lo envió dentro del texto
-            limpio = `[${emisor}]: ` + texto; 
+            limpio = limpio.replace("[GLOBAL]", ""); 
+        } else if (destinoStr.startsWith("GRUPO_")) {
+            sala = destinoStr; 
+            limpio = `[${emisor}]: ` + limpio.replace("[GRUPO]", ""); 
         } else {
-            limpio = texto.replace("[PRIVADO]", "");
+            limpio = limpio.replace("[PRIVADO]", "");
         }
 
-        // Si es un chat privado o grupo y no está abierto, lo añadimos a chats abiertos (si no es grupo ya mostrado)
         if (!sala.startsWith("GRUPO_")) {
             setChatsAbiertos(prev => {
                 if (!prev.includes(sala)) return [sala, ...prev];
@@ -183,7 +257,7 @@ function App() {
             });
         }
 
-        const nuevoMensaje = { id: idMensaje, autor: emisor, texto: limpio, tipo: 'other', hora: hora, reportadoComoLeido: false };
+        const nuevoMensaje = { id: idUnicoSeguro(idMensaje), autor: emisor, texto: limpio, tipo: 'other', hora: hora, reportadoComoLeido: false };
         setHistoriales(prev => ({ ...prev, [sala]: [...(prev[sala] || []), nuevoMensaje] }));
 
         if (sala !== chatActivoRef.current) {
@@ -203,92 +277,96 @@ function App() {
         }
     };
 
+    const idUnicoSeguro = (base) => base || (Date.now().toString() + Math.floor(Math.random() * 1000));
+
     const handleSendMessage = (texto) => {
+        if (!chatActivo) return;
         let receptores = [];
         let prefijo = "";
+        const chatActivoStr = String(chatActivo);
 
-        // Enrutar el mensaje dependiendo del chat activo
-        if (chatActivo === "Todos") {
+        if (chatActivoStr === "Todos") {
             prefijo = "[GLOBAL]";
             receptores = usuarios;
-        } else if (chatActivo.startsWith("GRUPO_")) {
-            // Buscamos el grupo y obtenemos todos los miembros menos a nosotros mismos
-            const grupoActual = gruposDB.find(g => g.id === chatActivo);
-            if (grupoActual) {
+        } else if (chatActivoStr.startsWith("GRUPO_")) {
+            const grupoActual = misGrupos.find(g => String(g.id) === chatActivoStr);
+            if (grupoActual && grupoActual.miembros) {
+                prefijo = "[GRUPO]";
                 receptores = grupoActual.miembros.filter(m => m !== nombre);
             }
         } else {
             prefijo = "[PRIVADO]";
-            receptores = [chatActivo];
+            receptores = [chatActivoStr];
         }
         
-        const idUnico = Date.now().toString() + Math.floor(Math.random() * 1000);
+        const idUnico = idUnicoSeguro();
         const horaActual = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
         const payloadOculto = JSON.stringify({
             tipo: "NUEVO_MENSAJE",
             texto: prefijo + texto,
-            destino: chatActivo, // Clave para que el receptor sepa en qué pestaña mostrarlo
+            destino: chatActivoStr, 
             id: idUnico,
             hora: horaActual
         });
 
-        // Enviar solo si hay receptores
-        if (receptores.length > 0) {
-            send("CHAT", { receptor: receptores, mensaje: payloadOculto });
+        // FILTRO Y ENVÍO CORREGIDO PARA TU SERVIDOR NODE
+        const receptoresReales = receptores.filter(r => r !== nombre);
+        if (receptoresReales.length > 0) {
+            send("CHAT", { receptor: receptoresReales, mensaje: payloadOculto });
         }
 
         const miMensaje = { id: idUnico, autor: "Tú", texto: texto, tipo: 'me', estado: 'enviado', hora: horaActual };
-        setHistoriales(prev => ({ ...prev, [chatActivo]: [...(prev[chatActivo] || []), miMensaje] }));
+        setHistoriales(prev => ({ ...prev, [chatActivoStr]: [...(prev[chatActivoStr] || []), miMensaje] }));
     };
 
     const cambiarChat = (chatId) => {
-        setChatActivo(chatId);
-        setNoLeidos(prev => ({ ...prev, [chatId]: 0 }));
+        if (!chatId) return;
+        const chatIdStr = String(chatId);
+        setChatActivo(chatIdStr);
+        setNoLeidos(prev => ({ ...prev, [chatIdStr]: 0 }));
 
         setHistoriales(prev => {
-            const chatHistory = prev[chatId] || [];
+            const chatHistory = prev[chatIdStr] || [];
             let huboCambios = false;
             
             const updatedHistory = chatHistory.map(msg => {
-                // No enviamos recibos de lectura masivos en grupos aún para simplificar
-                if (msg.tipo === 'other' && !msg.reportadoComoLeido && !chatId.startsWith("GRUPO_")) {
+                if (msg && msg.tipo === 'other' && !msg.reportadoComoLeido && !chatIdStr.startsWith("GRUPO_") && msg.autor !== "Sistema") {
                     const reciboLeido = JSON.stringify({ tipo: "CONFIRMACION_LECTURA", idMensaje: msg.id });
                     send("CHAT", { receptor: [msg.autor], mensaje: reciboLeido });
-                    
                     huboCambios = true;
                     return { ...msg, reportadoComoLeido: true };
                 }
                 return msg;
             });
 
-            if (huboCambios) return { ...prev, [chatId]: updatedHistory };
+            if (huboCambios) return { ...prev, [chatIdStr]: updatedHistory };
             return prev;
         });
     };
 
     const abrirChat = (usuario) => {
-        setChatsAbiertos(prev => {
-            if (!prev.includes(usuario)) return [usuario, ...prev];
-            return prev;
-        });
-        cambiarChat(usuario); 
-        setVistaContactos(false);
-        setBusqueda("");
+        if (usuario !== nombre) {
+            setChatsAbiertos(prev => {
+                if (!prev.includes(usuario)) return [usuario, ...prev];
+                return prev;
+            });
+            cambiarChat(usuario); 
+            setVistaContactos(false);
+            setBusqueda("");
+        }
     };
 
-    const abrirGrupo = (grupo) => {
-        cambiarChat(grupo.id);
-    };
-
-    // Helper para mostrar el nombre correcto en la cabecera
     const obtenerNombreChatActivo = () => {
         if (chatActivo === 'Todos') return 'Sala General';
-        if (chatActivo.startsWith("GRUPO_")) {
-            const g = gruposDB.find(g => g.id === chatActivo);
+        if (!chatActivo) return '';
+        
+        const chatActivoStr = String(chatActivo);
+        if (chatActivoStr.startsWith("GRUPO_")) {
+            const g = misGrupos.find(g => String(g.id) === chatActivoStr);
             return g ? g.nombre : "Grupo";
         }
-        return chatActivo;
+        return chatActivoStr;
     };
 
     if (!identificado) {
@@ -317,10 +395,10 @@ function App() {
                         </div>
                         <div className="user-list vertical-list">
                             <p style={{padding: '5px 20px', fontSize: '0.8rem', color: 'gray'}}>Selecciona integrantes:</p>
-                            {usuarios.length === 0 ? (
-                                <p className="empty-msg" style={{padding: '0 20px'}}>No hay usuarios disponibles para agregar.</p>
+                            {usuarios.filter(u => u !== nombre).length === 0 ? (
+                                <p className="empty-msg" style={{padding: '0 20px'}}>No hay más usuarios conectados para agregar.</p>
                             ) : (
-                                usuarios.map(u => (
+                                usuarios.filter(u => u !== nombre).map(u => (
                                     <div key={u} className="tab" onClick={() => toggleMiembro(u)} style={{ cursor: 'pointer' }}>
                                         <input type="checkbox" checked={miembrosSeleccionados.includes(u)} readOnly style={{ pointerEvents: 'none' }}/>
                                         <div className="tab-info" style={{marginLeft: '10px'}}>
@@ -334,8 +412,8 @@ function App() {
                             <button 
                                 onClick={guardarNuevoGrupo} 
                                 disabled={!nombreGrupoNuevo.trim() || miembrosSeleccionados.length === 0}
-                                style={{ padding: '8px 15px', backgroundColor: (!nombreGrupoNuevo.trim() || miembrosSeleccionados.length === 0) ? '#555' : '#4CAF50', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
-                                Guardar Grupo
+                                style={{ padding: '8px 15px', backgroundColor: (!nombreGrupoNuevo.trim() || miembrosSeleccionados.length === 0) ? '#cbd5d0' : '#00a884', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
+                                Crear Grupo
                             </button>
                         </div>
                     </>
@@ -343,16 +421,16 @@ function App() {
                     <>
                         <div className="sidebar-header slide-header">
                             <button className="icon-btn" onClick={() => { setVistaContactos(false); setBusqueda(""); }}>←</button>
-                            <h3>Contactos</h3>
+                            <h3>Contactos Online</h3>
                         </div>
                         <div className="search-container">
                             <input type="text" placeholder="Buscar..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
                         </div>
                         <div className="user-list vertical-list">
-                            {usuariosFiltrados.length === 0 ? (
+                            {usuariosFiltrados.filter(u => u !== nombre).length === 0 ? (
                                 <p className="empty-msg">No hay nadie más conectado</p>
                             ) : (
-                                usuariosFiltrados.map(u => (
+                                usuariosFiltrados.filter(u => u !== nombre).map(u => (
                                     <div key={u} className="tab" onClick={() => abrirChat(u)}>
                                         <div className="avatar">👤</div>
                                         <div className="tab-info">
@@ -365,46 +443,73 @@ function App() {
                     </>
                 ) : (
                     <>
-                        <div className="sidebar-header">
-                            <h3>Mis Chats</h3>
+                        <div className="sidebar-profile">
+                            <div className="avatar profile-avatar">👤</div>
                             <div>
-                                <button className="new-chat-btn" onClick={() => setVistaCrearGrupo(true)} style={{marginRight: '5px'}}>📁</button>
-                                <button className="new-chat-btn" onClick={() => setVistaContactos(true)}>➕</button>
+                                <span className="profile-name">{nombre}</span>
+                                <span className="profile-status">En línea</span>
+                            </div>
+                        </div>
+
+                        <div className="sidebar-header">
+                            <h3>Mensajes</h3>
+                            <div>
+                                <button className="new-chat-btn" onClick={() => setVistaCrearGrupo(true)} title="Nuevo Grupo" style={{marginRight: '15px'}}>👥</button>
+                                <button className="new-chat-btn" onClick={() => setVistaContactos(true)} title="Nuevo Mensaje">➕</button>
                             </div>
                         </div>
 
                         <div className="user-list">
-                            <p style={{padding: '5px 20px', fontSize: '0.7rem', color: 'gray'}}>GRUPOS PRIVADOS</p>
-                            {gruposDB.map(g => (
-                                // Ahora al tocar un grupo, usamos su ID único para cambiar el chat activo
-                                <div key={g.id} className={`tab ${chatActivo === g.id ? "active-tab" : ""}`} onClick={() => abrirGrupo(g)}>
-                                    <div className="avatar">👥</div>
-                                    <div className="tab-info">
-                                        <span className="tab-name">{g.nombre}</span>
-                                        <span className="tab-status" style={{fontSize: '0.65rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
-                                            {g.miembros?.join(', ')}
-                                        </span>
-                                    </div>
-                                    {noLeidos[g.id] > 0 && <div className="unread-badge">{noLeidos[g.id]}</div>}
+                            <div className={`tab ${chatActivo === "Todos" ? "active-tab" : ""}`} onClick={() => cambiarChat("Todos")}>
+                                <div className="avatar">🌐</div>
+                                <div className="tab-info">
+                                    <span className="tab-name">Sala General</span>
                                 </div>
-                            ))}
-                            <hr style={{opacity: 0.1, margin: '10px 0'}}/>
-                            {chatsAbiertos.map(chat => (
-                                <div key={chat} className={`tab ${chatActivo === chat ? "active-tab" : ""}`} onClick={() => cambiarChat(chat)}>
-                                    <div className="avatar">{chat === "Todos" ? "🌐" : "👤"}</div>
-                                    <div className="tab-info">
-                                        <span className="tab-name">{chat === "Todos" ? "Sala General" : chat}</span>
+                                {noLeidos["Todos"] > 0 && <div className="unread-badge">{noLeidos["Todos"]}</div>}
+                            </div>
+
+                            {misGrupos.length > 0 && <p style={{padding: '10px 20px 5px', fontSize: '0.75rem', color: '#667781', fontWeight: 'bold'}}>MIS GRUPOS</p>}
+                            {misGrupos.map(g => {
+                                const idSeguro = g.id || g.nombre;
+                                const miembrosSeguros = Array.isArray(g.miembros) ? g.miembros.join(', ') : '';
+                                return (
+                                    <div key={idSeguro} className={`tab ${String(chatActivo) === String(idSeguro) ? "active-tab" : ""}`} onClick={() => cambiarChat(idSeguro)}>
+                                        <div className="avatar">👥</div>
+                                        <div className="tab-info">
+                                            <span className="tab-name">{g.nombre}</span>
+                                            <span className="tab-status" style={{fontSize: '0.7rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
+                                                {miembrosSeguros}
+                                            </span>
+                                        </div>
+                                        {noLeidos[idSeguro] > 0 && <div className="unread-badge">{noLeidos[idSeguro]}</div>}
                                     </div>
-                                    {noLeidos[chat] > 0 && <div className="unread-badge">{noLeidos[chat]}</div>}
-                                </div>
-                            ))}
+                                );
+                            })}
+
+                            {chatsAbiertos.filter(c => c !== "Todos").length > 0 && <p style={{padding: '10px 20px 5px', fontSize: '0.75rem', color: '#667781', fontWeight: 'bold'}}>CHATS PRIVADOS</p>}
+                            {chatsAbiertos.filter(c => c !== "Todos").map(chat => {
+                                const chatStr = String(chat);
+                                return (
+                                    <div key={chatStr} className={`tab ${chatActivo === chatStr ? "active-tab" : ""}`} onClick={() => cambiarChat(chatStr)}>
+                                        <div className="avatar">👤</div>
+                                        <div className="tab-info">
+                                            <span className="tab-name">{chatStr}</span>
+                                        </div>
+                                        {noLeidos[chatStr] > 0 && <div className="unread-badge">{noLeidos[chatStr]}</div>}
+                                    </div>
+                                );
+                            })}
                         </div>
                     </>
                 )}
             </aside>
             <main className="chat-window">
-                <header className="chat-header">Chat con: <strong>{obtenerNombreChatActivo()}</strong></header>
-                <MessageWindow messages={historiales[chatActivo] || []} />
+                <header className="chat-header">
+                    <div className="chat-header-info">
+                        <strong>{obtenerNombreChatActivo()}</strong>
+                    </div>
+                </header>
+                <MessageWindow messages={historiales[chatActivo] || []} onReply={() => {}} />
                 <TextBar onSend={handleSendMessage} />
             </main>
         </div>
